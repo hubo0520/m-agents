@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+sqlalchemy==2.0.35
+pydantic==2.9.0
+pydantic-settings==2.5.0
+python-dateutil==2.9.0
+# V3: LLM 接入
+openai>=1.40.0
+# V3: LangGraph 编排引擎
+langgraph>=0.2.0
+langgraph-checkpoint-sqlite>=1.0.0
