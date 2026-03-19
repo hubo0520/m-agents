@@ -1,8 +1,10 @@
 """风险案件 API 路由"""
 import json
+import asyncio
+import time as _time
 from datetime import datetime, timedelta, date
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.responses import PlainTextResponse, JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 
@@ -18,7 +20,7 @@ from app.schemas.schemas import (
 )
 from app.engine.metrics import get_all_metrics
 from app.engine.cashflow import forecast_cash_gap
-from app.agents.orchestrator import analyze as agent_analyze
+from app.agents.orchestrator import analyze as agent_analyze, AnalysisProgressEvent
 from app.services.approval import review_case, transition_status, write_audit_log
 from app.services.export import export_case_markdown, export_case_json
 from app.services.task_generator import generate_tasks_for_case
@@ -242,6 +244,123 @@ def analyze_case(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+
+# ─────── GET /api/risk-cases/{case_id}/analysis-progress ─────────
+@router.get("/risk-cases/{case_id}/analysis-progress")
+def get_analysis_progress(case_id: int, db: Session = Depends(get_db)):
+    """获取案件分析进度（用于刷新页面后恢复工作流面板）"""
+    case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="案件不存在")
+
+    progress = []
+    if case.analysis_progress_json:
+        try:
+            progress = json.loads(case.analysis_progress_json)
+        except Exception:
+            pass
+
+    return {
+        "status": case.status,
+        "progress": progress,
+    }
+
+
+# ─────── POST /api/risk-cases/{case_id}/analyze/stream ─────────
+@router.post("/risk-cases/{case_id}/analyze/stream")
+async def analyze_case_stream(
+    case_id: int,
+    mode: str = Query("v3", description="分析模式: v1（旧模式）或 v3（多Agent工作流）"),
+    db: Session = Depends(get_db),
+):
+    """流式分析：通过 SSE 实时推送分析进度"""
+    case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="案件不存在")
+
+    # 使用 asyncio.Queue 在回调和流生成器之间传递事件
+    event_queue: asyncio.Queue = asyncio.Queue()
+
+    def on_progress(event: AnalysisProgressEvent):
+        """进度回调：将事件放入队列"""
+        event_queue.put_nowait(("progress", event.to_dict()))
+
+    # 记录每个步骤的 LLM 交互摘要（仅用于 SSE 推送，持久化已在 graph._run_sequential 中统一处理）
+    _llm_step_data: dict = {}
+
+    def on_llm_event(llm_evt):
+        """LLM 事件回调：将 llm_input/llm_chunk/llm_done 事件放入 SSE 队列"""
+        event_queue.put_nowait((llm_evt.event_type, llm_evt.to_dict()))
+
+    def _sync_run_analysis():
+        """
+        在线程池中运行同步分析逻辑。
+
+        ⚠️ 关键：必须在线程内创建独立的 db session，
+        因为 SQLite 不支持跨线程共享连接，
+        且 start_workflow() 内部也会创建自己的 session，
+        如果外层 session 持有未提交的写锁会导致 "database is locked"。
+        """
+        from app.core.database import SessionLocal
+        thread_db = SessionLocal()
+        try:
+            if mode == "v3":
+                from app.agents.orchestrator import analyze_v3
+                result = analyze_v3(thread_db, case_id, on_progress=on_progress, on_llm_event=on_llm_event)
+            else:
+                result = agent_analyze(thread_db, case_id, on_progress=on_progress, on_llm_event=on_llm_event)
+            thread_db.commit()
+            event_queue.put_nowait(("complete", {"agent_output": result}))
+        except Exception as e:
+            thread_db.rollback()
+            event_queue.put_nowait(("error", {"error": str(e)}))
+        finally:
+            thread_db.close()
+
+    async def run_analysis():
+        """将同步分析包装为异步任务"""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _sync_run_analysis)
+
+    async def event_generator():
+        """SSE 事件生成器"""
+        # 启动分析任务
+        analysis_task = asyncio.create_task(run_analysis())
+        last_event_time = _time.time()
+
+        try:
+            while True:
+                try:
+                    # 等待事件，超时 15 秒发送心跳
+                    event_type, data = await asyncio.wait_for(
+                        event_queue.get(), timeout=15.0
+                    )
+                    last_event_time = _time.time()
+
+                    data_str = json.dumps(data, ensure_ascii=False)
+                    yield f"event: {event_type}\ndata: {data_str}\n\n"
+
+                    # complete 或 error 后结束流
+                    if event_type in ("complete", "error"):
+                        break
+                except asyncio.TimeoutError:
+                    # 发送心跳
+                    yield ": heartbeat\n\n"
+        finally:
+            # 确保分析任务完成
+            if not analysis_task.done():
+                analysis_task.cancel()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 # ─────── GET /api/risk-cases/{case_id}/evidence ─────────

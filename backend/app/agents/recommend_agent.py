@@ -110,13 +110,15 @@ def run_recommendations(
     metrics: dict,
     predicted_gap: float,
     evidence: list,
+    on_llm_event=None,
 ) -> RecommendationOutput:
     """V3 适配器：将现有推荐逻辑包装为 RecommendationOutput，支持 LLM / 规则引擎双路径"""
     from app.core.llm_client import is_llm_enabled
 
     if is_llm_enabled():
         return _run_recommendations_llm(
-            agent_input, db, merchant, metrics, predicted_gap, evidence
+            agent_input, db, merchant, metrics, predicted_gap, evidence,
+            on_llm_event=on_llm_event,
         )
 
     # ── 规则引擎路径（原有逻辑） ──
@@ -170,9 +172,10 @@ def _run_recommendations_llm(
     metrics: dict,
     predicted_gap: float,
     evidence: list,
+    on_llm_event=None,
 ) -> RecommendationOutput:
     """使用 LLM 生成动作建议（OPENAI_BASE_URL 在 llm_client 中生效）"""
-    from app.core.llm_client import structured_output
+    from app.core.llm_client import structured_output, LlmEvent
 
     logger.info("案件 %s 使用 LLM 路径生成动作建议", agent_input.case_id)
 
@@ -234,6 +237,19 @@ def _run_recommendations_llm(
 请基于以上信息生成动作建议列表。"""
 
     try:
+        # 发送 llm_input 事件
+        if on_llm_event:
+            on_llm_event(LlmEvent(
+                event_type="llm_input",
+                agent_name="recommendation_agent",
+                step="generate_recommendations",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            ))
+
+        import time as _time
+        _t0 = _time.time()
+
         result = structured_output(
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -241,6 +257,18 @@ def _run_recommendations_llm(
             ],
             response_model=RecommendationOutput,
         )
+
+        _elapsed = int((_time.time() - _t0) * 1000)
+        # 发送 llm_done 事件
+        if on_llm_event:
+            rec_summary = "; ".join(r.title for r in result.recommendations)[:500]
+            on_llm_event(LlmEvent(
+                event_type="llm_done",
+                agent_name="recommendation_agent",
+                step="generate_recommendations",
+                content=rec_summary,
+                elapsed_ms=_elapsed,
+            ))
 
         # 后处理：强制校验安全约束
         for rec in result.recommendations:

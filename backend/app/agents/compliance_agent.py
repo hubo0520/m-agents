@@ -35,6 +35,7 @@ def run_compliance_guard(
     recommendation_output: dict,
     diagnosis_output: dict = None,
     evidence_output: dict = None,
+    on_llm_event=None,
 ) -> GuardOutput:
     """
     对 Recommendation Agent 的输出进行合规校验。
@@ -53,7 +54,10 @@ def run_compliance_guard(
     # 如果 LLM 启用，补充语义级检测
     from app.core.llm_client import is_llm_enabled
     if is_llm_enabled():
-        llm_result = _run_llm_semantic_guard(recommendation_output, diagnosis_output)
+        llm_result = _run_llm_semantic_guard(
+            recommendation_output, diagnosis_output,
+            on_llm_event=on_llm_event,
+        )
         if llm_result:
             # 合并 LLM 检测结果到规则引擎结果
             rule_result = _merge_guard_results(rule_result, llm_result)
@@ -185,6 +189,7 @@ def _extract_json_from_response(raw: str) -> dict:
 def _run_llm_semantic_guard(
     recommendation_output: dict,
     diagnosis_output: dict = None,
+    on_llm_event=None,
 ) -> Optional[GuardOutput]:
     """
     使用 LLM 进行语义级合规检测（OPENAI_BASE_URL 在 llm_client 中生效）。
@@ -195,7 +200,7 @@ def _run_llm_semantic_guard(
     - 过度承诺或误导性表述
     - 超出 Agent 职责边界的建议
     """
-    from app.core.llm_client import chat_completion
+    from app.core.llm_client import chat_completion_stream, LlmEvent
 
     logger.info("使用 LLM 路径进行语义级合规校验")
 
@@ -234,14 +239,48 @@ def _run_llm_semantic_guard(
 请进行语义合规检测。"""
 
     try:
-        raw_response = chat_completion(
+        # 发送 llm_input 事件
+        if on_llm_event:
+            on_llm_event(LlmEvent(
+                event_type="llm_input",
+                agent_name="compliance_agent",
+                step="run_guardrails",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            ))
+
+        import time as _time
+        _t0 = _time.time()
+
+        def _on_chunk(delta: str):
+            if on_llm_event:
+                on_llm_event(LlmEvent(
+                    event_type="llm_chunk",
+                    agent_name="compliance_agent",
+                    step="run_guardrails",
+                    content=delta,
+                ))
+
+        raw_response = chat_completion_stream(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            on_chunk=_on_chunk,
             temperature=0.1,
             max_tokens=1024,
         )
+
+        _elapsed = int((_time.time() - _t0) * 1000)
+        # 发送 llm_done 事件
+        if on_llm_event:
+            on_llm_event(LlmEvent(
+                event_type="llm_done",
+                agent_name="compliance_agent",
+                step="run_guardrails",
+                content=raw_response[:500] if raw_response else "",
+                elapsed_ms=_elapsed,
+            ))
 
         logger.debug("LLM 合规检测原始响应: %s", raw_response[:500] if raw_response else "(空)")
 

@@ -176,6 +176,23 @@ export async function getCaseTasks(
   return fetchAPI<UnifiedTask[]>(`/api/risk-cases/${caseId}/tasks`);
 }
 
+/* 获取分析进度（刷新页面后恢复工作流面板） */
+export async function getAnalysisProgress(
+  caseId: number
+): Promise<{ status: string; progress: Array<{
+  step: string;
+  step_name: string;
+  step_index: number;
+  total_steps: number;
+  status: string;
+  elapsed_ms: number;
+  summary: string;
+  llm_input_summary?: string;
+  llm_output_summary?: string;
+}> }> {
+  return fetchAPI(`/api/risk-cases/${caseId}/analysis-progress`);
+}
+
 /* ─────── V3: 工作流 API ─────── */
 
 import type {

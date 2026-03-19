@@ -11,6 +11,7 @@ def run_summary(
     recommendation_output: dict,
     execution_results: list = None,
     guard_output: dict = None,
+    on_llm_event=None,
 ) -> SummaryOutput:
     """
     基于各 Agent 输出生成案件最终摘要，支持 LLM / 规则引擎双路径。
@@ -25,7 +26,8 @@ def run_summary(
 
     if is_llm_enabled():
         return _run_summary_llm(
-            diagnosis_output, recommendation_output, execution_results, guard_output
+            diagnosis_output, recommendation_output, execution_results, guard_output,
+            on_llm_event=on_llm_event,
         )
 
     # ── 规则引擎路径（原有逻辑） ──
@@ -105,9 +107,10 @@ def _run_summary_llm(
     recommendation_output: dict,
     execution_results: list = None,
     guard_output: dict = None,
+    on_llm_event=None,
 ) -> SummaryOutput:
     """使用 LLM 生成案件摘要（OPENAI_BASE_URL 在 llm_client 中生效）"""
-    from app.core.llm_client import chat_completion
+    from app.core.llm_client import chat_completion_stream, LlmEvent
 
     logger.info("使用 LLM 路径生成案件摘要")
 
@@ -134,14 +137,48 @@ def _run_summary_llm(
 请生成案件摘要。"""
 
     try:
-        summary_text = chat_completion(
+        # 发送 llm_input 事件
+        if on_llm_event:
+            on_llm_event(LlmEvent(
+                event_type="llm_input",
+                agent_name="summary_agent",
+                step="finalize_summary",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            ))
+
+        import time as _time
+        _t0 = _time.time()
+
+        def _on_chunk(delta: str):
+            if on_llm_event:
+                on_llm_event(LlmEvent(
+                    event_type="llm_chunk",
+                    agent_name="summary_agent",
+                    step="finalize_summary",
+                    content=delta,
+                ))
+
+        summary_text = chat_completion_stream(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            on_chunk=_on_chunk,
             temperature=0.3,
             max_tokens=512,
         )
+
+        _elapsed = int((_time.time() - _t0) * 1000)
+        # 发送 llm_done 事件
+        if on_llm_event:
+            on_llm_event(LlmEvent(
+                event_type="llm_done",
+                agent_name="summary_agent",
+                step="finalize_summary",
+                content=summary_text.strip(),
+                elapsed_ms=_elapsed,
+            ))
 
         # 构建动作结果（复用原有逻辑）
         action_results = _build_action_results(

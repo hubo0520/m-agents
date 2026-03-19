@@ -269,7 +269,9 @@ def diagnose_case(state: GraphState) -> dict:
                 "summary": bundle.get("summary", ""),
             })
 
-        diagnosis = run_diagnosis(agent_input, metrics, evidence_list)
+        # 从 state 中提取 on_llm_event 回调
+        on_llm_event = state.get("_on_llm_event")
+        diagnosis = run_diagnosis(agent_input, metrics, evidence_list, on_llm_event=on_llm_event)
         output = diagnosis.model_dump()
 
         if workflow_run_id:
@@ -359,7 +361,8 @@ def generate_recommendations(state: GraphState) -> dict:
             })
 
         from app.agents.recommend_agent import run_recommendations
-        rec_output = run_recommendations(agent_input, db, merchant, metrics, predicted_gap, evidence_list)
+        on_llm_event = state.get("_on_llm_event")
+        rec_output = run_recommendations(agent_input, db, merchant, metrics, predicted_gap, evidence_list, on_llm_event=on_llm_event)
         output = rec_output.model_dump()
 
         if workflow_run_id:
@@ -396,6 +399,7 @@ def run_guardrails(state: GraphState) -> dict:
             recommendation_output=recommendation_output,
             diagnosis_output=diagnosis_output,
             evidence_output=evidence_output,
+            on_llm_event=state.get("_on_llm_event"),
         )
         output = guard_result.model_dump()
 
@@ -432,13 +436,14 @@ def create_approval_tasks(state: GraphState) -> dict:
         guard_output = state.get("guard_output", {})
 
         # ──── 1. 持久化 agent_output_json（诊断结果 + 建议） ────
-        # 因为暂停后 finalize_summary 不会执行，需要在此提前写入
+        # finalize_summary 已经在前面执行，这里用完整的 summary_output
         case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
         if case:
+            summary_output = state.get("summary_output", {})
             agent_output = {
                 "case_id": f"RC-{case_id:04d}",
                 "risk_level": diagnosis_output.get("risk_level", "medium"),
-                "case_summary": diagnosis_output.get("case_summary", ""),
+                "case_summary": summary_output.get("case_summary", "") or diagnosis_output.get("case_summary", ""),
                 "root_causes": diagnosis_output.get("root_causes", []),
                 "cash_gap_forecast": state.get("forecast_output", {}),
                 "recommendations": recommendation_output.get("recommendations", []),
@@ -625,6 +630,7 @@ def finalize_summary(state: GraphState) -> dict:
             recommendation_output=state.get("recommendation_output", {}),
             execution_results=state.get("execution_results"),
             guard_output=state.get("guard_output"),
+            on_llm_event=state.get("_on_llm_event"),
         )
         output = summary.model_dump()
 
@@ -641,11 +647,12 @@ def finalize_summary(state: GraphState) -> dict:
                 "manual_review_required": state.get("diagnosis_output", {}).get("manual_review_required", False),
             }, ensure_ascii=False, default=str)
             case.risk_level = state.get("diagnosis_output", {}).get("risk_level", case.risk_level)
-            case.status = "COMPLETED"
+            # 注意：不设置 case.status = "COMPLETED"，因为后续还有 create_approval_tasks 和 write_audit_log
+            case.status = "ANALYZED"
             case.updated_at = datetime.utcnow()
 
         if workflow_run_id:
-            _update_workflow_run(db, workflow_run_id, WorkflowStatus.COMPLETED.value, "finalize_summary")
+            _update_workflow_run(db, workflow_run_id, WorkflowStatus.ANALYZING.value, "finalize_summary")
             latency = int((time.time() - start_time) * 1000)
             _record_agent_run(db, workflow_run_id, "summary_agent", {}, output, "SUCCESS", latency)
 

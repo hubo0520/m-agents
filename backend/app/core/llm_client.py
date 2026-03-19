@@ -4,7 +4,8 @@ LLM 客户端 — 统一封装 OpenAI 调用
 所有 Agent 通过此模块调用 LLM，确保 OPENAI_BASE_URL / API_KEY / MODEL 统一管理。
 """
 import logging
-from typing import Optional, Type, TypeVar
+from dataclasses import dataclass, asdict
+from typing import Callable, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -71,6 +72,52 @@ def chat_completion(
     return content if content is not None else ""
 
 
+def chat_completion_stream(
+    messages: list[dict],
+    on_chunk: Optional[Callable[[str], None]] = None,
+    model: Optional[str] = None,
+    temperature: float = 0.3,
+    max_tokens: int = 2048,
+) -> str:
+    """
+    流式聊天补全调用 — 逐 chunk 返回大模型回复。
+
+    Args:
+        messages: OpenAI 消息列表
+        on_chunk: 每收到一个 chunk 时调用的回调，传入 delta text；为 None 时等价于非流式调用
+        model: 模型名称，默认使用 config 中的 OPENAI_MODEL
+        temperature: 温度参数
+        max_tokens: 最大 token 数
+
+    Returns:
+        完整的 LLM 回复文本（所有 chunk 拼接）
+    """
+    # on_chunk 为 None 时退化为非流式调用
+    if on_chunk is None:
+        return chat_completion(messages, model, temperature, max_tokens)
+
+    client = _get_client()
+    stream = client.chat.completions.create(
+        model=model or settings.OPENAI_MODEL,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=True,
+    )
+
+    full_content = ""
+    for chunk in stream:
+        delta = chunk.choices[0].delta
+        if delta.content:
+            full_content += delta.content
+            try:
+                on_chunk(delta.content)
+            except Exception as e:
+                logger.warning("on_chunk 回调异常: %s", e)
+
+    return full_content
+
+
 def structured_output(
     messages: list[dict],
     response_model: Type[T],
@@ -131,3 +178,25 @@ def structured_output(
 def is_llm_enabled() -> bool:
     """检查 LLM 是否启用"""
     return settings.USE_LLM and bool(settings.OPENAI_API_KEY)
+
+
+# ═══════════════════════════════════════════════════════════════
+# LLM 事件数据类（用于 Agent → SSE 推送链路）
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class LlmEvent:
+    """
+    LLM 交互事件 — 在 Agent 调用 LLM 的过程中产生，
+    通过回调链透传到 SSE 端点推送给前端。
+    """
+    event_type: str           # "llm_input" | "llm_chunk" | "llm_done"
+    agent_name: str           # Agent 名称，如 "summary_agent"
+    step: str                 # 对应的工作流步骤，如 "finalize_summary"
+    content: str = ""         # 事件内容（chunk delta / 完整回复）
+    elapsed_ms: int = 0       # 耗时（仅 llm_done 时有值）
+    system_prompt: str = ""   # System prompt（仅 llm_input 时有值）
+    user_prompt: str = ""     # User prompt（仅 llm_input 时有值）
+
+    def to_dict(self) -> dict:
+        return asdict(self)

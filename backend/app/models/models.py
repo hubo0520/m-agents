@@ -244,6 +244,7 @@ class RiskCase(Base):
     trigger_json = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, default="NEW")
     agent_output_json = Column(Text, nullable=True)
+    analysis_progress_json = Column(Text, nullable=True)  # 分析进度 JSON，刷新页面后可恢复工作流
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

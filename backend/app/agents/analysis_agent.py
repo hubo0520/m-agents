@@ -94,12 +94,12 @@ def generate_summary(metrics: dict, evidence: List[dict]) -> dict:
 from app.agents.schemas import AgentInput, DiagnosisOutput, DiagnosisRootCause
 
 
-def run_diagnosis(agent_input: AgentInput, metrics: dict, evidence: list) -> DiagnosisOutput:
+def run_diagnosis(agent_input: AgentInput, metrics: dict, evidence: list, on_llm_event=None) -> DiagnosisOutput:
     """V3 适配器：将现有分析逻辑包装为 DiagnosisOutput，支持 LLM / 规则引擎双路径"""
     from app.core.llm_client import is_llm_enabled
 
     if is_llm_enabled():
-        return _run_diagnosis_llm(agent_input, metrics, evidence)
+        return _run_diagnosis_llm(agent_input, metrics, evidence, on_llm_event=on_llm_event)
 
     # 回退到规则引擎
     result = generate_summary(metrics, evidence)
@@ -137,9 +137,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list) -> DiagnosisOutput:
+def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list, on_llm_event=None) -> DiagnosisOutput:
     """使用 LLM 生成诊断结果（OPENAI_BASE_URL 在 llm_client 中生效）"""
-    from app.core.llm_client import structured_output
+    from app.core.llm_client import structured_output, LlmEvent
 
     logger.info("案件 %s 使用 LLM 路径生成诊断结果", agent_input.case_id)
 
@@ -168,6 +168,19 @@ def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list) -
 请基于以上信息生成诊断分析。"""
 
     try:
+        # 发送 llm_input 事件
+        if on_llm_event:
+            on_llm_event(LlmEvent(
+                event_type="llm_input",
+                agent_name="diagnosis_agent",
+                step="diagnose_case",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            ))
+
+        import time as _time
+        _t0 = _time.time()
+
         result = structured_output(
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -175,6 +188,18 @@ def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list) -
             ],
             response_model=DiagnosisOutput,
         )
+
+        _elapsed = int((_time.time() - _t0) * 1000)
+        # 发送 llm_done 事件
+        if on_llm_event:
+            on_llm_event(LlmEvent(
+                event_type="llm_done",
+                agent_name="diagnosis_agent",
+                step="diagnose_case",
+                content=result.business_summary[:500] if result.business_summary else "",
+                elapsed_ms=_elapsed,
+            ))
+
         logger.info("案件 %s LLM 诊断完成 | risk_level=%s", agent_input.case_id, result.risk_level)
         return result
     except Exception as e:

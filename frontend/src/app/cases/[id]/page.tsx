@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   getCaseDetail,
@@ -8,7 +8,17 @@ import {
   reviewCase,
   exportCase,
   getCaseTasks,
+  getAnalysisProgress,
 } from "@/lib/api";
+import { analyzeCaseStream } from "@/lib/sse";
+import type { AnalysisProgressEvent, LlmInputEvent, LlmChunkEvent, LlmDoneEvent } from "@/lib/sse";
+import AnalysisWorkflowPanel, {
+  initStepsFromEvent,
+  updateStepFromEvent,
+  buildStepsFromProgress,
+  type WorkflowStep,
+} from "@/components/AnalysisWorkflowPanel";
+import type { LlmStepData } from "@/components/LlmDetailPanel";
 import type { CaseDetail, ReviewRequest, UnifiedTask } from "@/types";
 import { getCaseStatusLabel, getCaseStatusColor, getTaskStatusLabel, getTaskStatusColor, getAuditActionLabel, parseAuditValue, getEvidenceTypeLabel, formatEvidenceSummary } from "@/lib/constants";
 import Link from "next/link";
@@ -185,6 +195,19 @@ export default function CaseDetailPage() {
   const [showReview, setShowReview] = useState(false);
   const [highlightedEvidence, setHighlightedEvidence] = useState<string | null>(null);
 
+  // 分析工作流状态
+  const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
+  const [showWorkflow, setShowWorkflow] = useState(false);
+  const [workflowComplete, setWorkflowComplete] = useState(false);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // LLM 交互数据状态（key 为 step 名称）
+  const [llmData, setLlmData] = useState<Record<string, LlmStepData>>({});
+  // 用于 RAF 节流的 chunk 缓冲
+  const llmChunkBufferRef = useRef<Record<string, string>>({});
+  const rafRef = useRef<number | null>(null);
+
   // 根据 EV-xxx 标签滚动到对应的证据卡片并高亮
   const scrollToEvidence = (eid: string) => {
     // EV-101 对应证据列表索引 0, EV-102 对应索引 1...
@@ -209,6 +232,63 @@ export default function CaseDetailPage() {
     try {
       const detail = await getCaseDetail(caseId);
       setData(detail);
+
+      // 如果后端状态为 ANALYZING（刷新页面恢复场景），恢复工作流面板 + 启动轮询
+      if (detail.status === "ANALYZING" && !analyzing) {
+        setAnalyzing(true);
+        setShowWorkflow(true);
+
+        // 从后端加载已持久化的分析进度
+        try {
+          const { progress } = await getAnalysisProgress(caseId);
+          if (progress && progress.length > 0) {
+            // 根据已完成的步骤构建 WorkflowStep 列表
+            const totalSteps = progress[0]?.total_steps || progress.length;
+            const recoveredSteps = buildStepsFromProgress(progress, totalSteps);
+            setWorkflowSteps(recoveredSteps);
+
+            // 恢复 LLM 交互摘要数据
+            // 使用 LLM 的步骤集合
+            const LLM_STEP_NAMES = new Set([
+              "diagnose_case", "generate_recommendations",
+              "finalize_summary", "run_guardrails", "generate_summary",
+            ]);
+            const recoveredLlm: Record<string, LlmStepData> = {};
+            for (const p of progress) {
+              if (p.llm_input_summary || p.llm_output_summary) {
+                // 有 LLM 数据的步骤（可能是 completed 或 running 中部分持久化的）
+                const isStillRunning = p.status === "running";
+                recoveredLlm[p.step] = {
+                  systemPrompt: p.llm_input_summary || "",
+                  userPrompt: "",
+                  streamingContent: p.llm_output_summary || "",
+                  fullContent: isStillRunning ? undefined : (p.llm_output_summary || ""),
+                  isStreaming: isStillRunning,
+                };
+              } else if (LLM_STEP_NAMES.has(p.step) && p.status === "running") {
+                // 正在运行的 LLM 步骤但还没有任何 LLM 数据：创建占位
+                recoveredLlm[p.step] = {
+                  systemPrompt: "",
+                  userPrompt: "",
+                  streamingContent: "",
+                  isStreaming: true,
+                };
+              }
+            }
+            if (Object.keys(recoveredLlm).length > 0) {
+              setLlmData(recoveredLlm);
+            }
+          } else {
+            setWorkflowSteps([]);
+          }
+        } catch {
+          setWorkflowSteps([]);
+        }
+
+        // 启动智能轮询：持续更新进度 + 检测完成
+        fallbackPolling();
+      }
+
       // V2: 获取关联的执行任务
       try {
         const tasks = await getCaseTasks(caseId);
@@ -229,15 +309,223 @@ export default function CaseDetailPage() {
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
-    try {
-      await analyzeCase(caseId);
-      await fetchDetail();
-    } catch (err) {
-      alert("分析失败: " + (err as Error).message);
-    } finally {
-      setAnalyzing(false);
-    }
+    setShowWorkflow(true);
+    setWorkflowComplete(false);
+    setWorkflowError(null);
+    setWorkflowSteps([]);
+
+    // 清空 LLM 状态
+    setLlmData({});
+    llmChunkBufferRef.current = {};
+
+    // 尝试 SSE 流式分析
+    const controller = analyzeCaseStream(caseId, {
+      onProgress: (event: AnalysisProgressEvent) => {
+        setWorkflowSteps((prev) => {
+          // 首次收到事件时初始化步骤列表
+          if (prev.length === 0) {
+            const steps = initStepsFromEvent(event);
+            // 更新当前步骤状态
+            return updateStepFromEvent(steps, event);
+          }
+          return updateStepFromEvent(prev, event);
+        });
+      },
+      onLlmInput: (event: LlmInputEvent) => {
+        setLlmData((prev) => ({
+          ...prev,
+          [event.step]: {
+            systemPrompt: event.system_prompt,
+            userPrompt: event.user_prompt,
+            streamingContent: "",
+            isStreaming: true,
+          },
+        }));
+      },
+      onLlmChunk: (event: LlmChunkEvent) => {
+        // 使用 RAF 节流：将 chunk 缓冲起来，每帧只更新一次
+        const buf = llmChunkBufferRef.current;
+        buf[event.step] = (buf[event.step] || "") + event.content;
+
+        if (!rafRef.current) {
+          rafRef.current = requestAnimationFrame(() => {
+            const snapshot = { ...buf };
+            // 清空缓冲
+            for (const k of Object.keys(buf)) buf[k] = "";
+            rafRef.current = null;
+
+            setLlmData((prev) => {
+              const updated = { ...prev };
+              for (const [step, delta] of Object.entries(snapshot)) {
+                if (delta && updated[step]) {
+                  updated[step] = {
+                    ...updated[step],
+                    streamingContent: updated[step].streamingContent + delta,
+                  };
+                }
+              }
+              return updated;
+            });
+          });
+        }
+      },
+      onLlmDone: (event: LlmDoneEvent) => {
+        setLlmData((prev) => ({
+          ...prev,
+          [event.step]: {
+            ...prev[event.step],
+            fullContent: event.content,
+            isStreaming: false,
+            elapsedMs: event.elapsed_ms,
+            streamingContent: prev[event.step]?.streamingContent || event.content,
+          },
+        }));
+      },
+      onComplete: async () => {
+        setWorkflowComplete(true);
+        // 先获取最新数据，确保 agent_output 已加载，再隐藏工作流面板
+        setTimeout(async () => {
+          try {
+            // 短轮询确保后端数据已落库（最多重试 5 次，间隔 500ms）
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const detail = await getCaseDetail(caseId);
+              if (detail.status !== "ANALYZING") {
+                setData(detail);
+                // 刷新任务数据
+                try {
+                  const tasks = await getCaseTasks(caseId);
+                  setCaseTasks(tasks);
+                } catch { /* ignore */ }
+                break;
+              }
+              if (attempt < 4) await new Promise((r) => setTimeout(r, 500));
+            }
+          } finally {
+            // 无论 fetchDetail 成功与否，都切换到结果视图
+            setShowWorkflow(false);
+            setAnalyzing(false);
+          }
+        }, 1000);
+      },
+      onError: async (data) => {
+        setWorkflowError(data.error);
+        // SSE 失败，降级到轮询模式
+        console.warn("SSE 分析失败，降级到轮询模式:", data.error);
+        await fallbackPolling();
+      },
+    });
+
+    abortControllerRef.current = controller;
   };
+
+  // SSE 断开后的降级轮询（同时轮询进度和状态）
+  const fallbackPolling = useCallback(async () => {
+    const maxAttempts = 60; // 最多轮询 2 分钟
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        // 并行获取案件状态和分析进度
+        const [detail, progressResult] = await Promise.all([
+          getCaseDetail(caseId),
+          getAnalysisProgress(caseId).catch(() => null),
+        ]);
+
+        // 更新进度面板
+        if (progressResult?.progress && progressResult.progress.length > 0) {
+          const totalSteps = progressResult.progress[0]?.total_steps || progressResult.progress.length;
+          const recoveredSteps = buildStepsFromProgress(progressResult.progress, totalSteps);
+          setWorkflowSteps(recoveredSteps);
+
+          // 同时从进度数据中恢复 LLM 交互摘要
+          const LLM_STEP_NAMES_POLL = new Set([
+            "diagnose_case", "generate_recommendations",
+            "finalize_summary", "run_guardrails", "generate_summary",
+          ]);
+          const recoveredLlm: Record<string, LlmStepData> = {};
+          for (const p of progressResult.progress) {
+            if (p.llm_input_summary || p.llm_output_summary) {
+              const isStillRunning = p.status === "running";
+              recoveredLlm[p.step] = {
+                systemPrompt: p.llm_input_summary || "",
+                userPrompt: "",
+                streamingContent: p.llm_output_summary || "",
+                fullContent: isStillRunning ? undefined : (p.llm_output_summary || ""),
+                isStreaming: isStillRunning,
+              };
+            } else if (LLM_STEP_NAMES_POLL.has(p.step) && p.status === "running") {
+              recoveredLlm[p.step] = {
+                systemPrompt: "",
+                userPrompt: "",
+                streamingContent: "",
+                isStreaming: true,
+              };
+            }
+          }
+          if (Object.keys(recoveredLlm).length > 0) {
+            setLlmData((prev) => {
+              // 合并：轮询到的新数据覆盖旧数据（因为 output 内容会随时间增长）
+              const merged = { ...prev };
+              for (const [key, val] of Object.entries(recoveredLlm)) {
+                const existing = merged[key];
+                if (!existing) {
+                  // 没有旧数据，直接使用
+                  merged[key] = val;
+                } else if (val.isStreaming) {
+                  // 步骤仍在运行中：用最新的流式输出覆盖
+                  merged[key] = {
+                    ...existing,
+                    systemPrompt: val.systemPrompt || existing.systemPrompt,
+                    streamingContent: val.streamingContent || existing.streamingContent,
+                    isStreaming: true,
+                  };
+                } else if (!existing.fullContent && val.fullContent) {
+                  // 步骤已完成：用完整内容覆盖
+                  merged[key] = val;
+                }
+              }
+              return merged;
+            });
+          }
+        }
+
+        if (detail.status === "ANALYZED" || detail.status === "APPROVED" || detail.status === "PENDING_APPROVAL" || detail.status === "COMPLETED") {
+          setData(detail);
+          setWorkflowComplete(true);
+          // 短暂延迟后隐藏面板，让完成动画有时间播放
+          // 注意：先 setData 确保数据已更新，再隐藏面板
+          setTimeout(() => {
+            setShowWorkflow(false);
+            setAnalyzing(false);
+          }, 800);
+          // 刷新任务数据
+          try {
+            const tasks = await getCaseTasks(caseId);
+            setCaseTasks(tasks);
+          } catch {
+            // ignore
+          }
+          return;
+        }
+      } catch {
+        // 忽略轮询失败，继续重试
+      }
+    }
+    // 超时
+    setWorkflowError("分析超时，请稍后刷新页面查看结果");
+    setTimeout(() => {
+      setShowWorkflow(false);
+      setAnalyzing(false);
+    }, 2000);
+  }, [caseId]);
+
+  // 组件卸载时清理 SSE 连接
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleReview = async (req: ReviewRequest) => {
     await reviewCase(caseId, req);
@@ -451,8 +739,20 @@ export default function CaseDetailPage() {
 
         {/* 右侧 — 40% */}
         <div className="col-span-2 space-y-5">
-          {/* Agent 案件总结 */}
-          {data.status === "NEW" ? (
+          {/* 分析工作流面板：分析中时显示 */}
+          {showWorkflow && (
+            <Card>
+              <AnalysisWorkflowPanel
+                steps={workflowSteps}
+                isComplete={workflowComplete}
+                error={workflowError}
+                llmData={llmData}
+              />
+            </Card>
+          )}
+
+          {/* Agent 案件总结：非分析中时显示 */}
+          {!showWorkflow && data.status === "NEW" ? (
             <Card className="text-center">
               <div className="py-4">
                 <p className="text-slate-400 mb-4 text-sm">待分析</p>
@@ -465,7 +765,7 @@ export default function CaseDetailPage() {
                 </button>
               </div>
             </Card>
-          ) : agentOutput ? (
+          ) : !showWorkflow && agentOutput ? (
             <Card>
               <div className="flex items-center gap-2 mb-3">
                 <CardTitle>Agent 案件总结</CardTitle>
@@ -500,7 +800,7 @@ export default function CaseDetailPage() {
                       </div>
                     </div>
                   ))}
-                  ))}n                </div>
+                </div>
               )}
             </Card>
           ) : null}
@@ -509,45 +809,65 @@ export default function CaseDetailPage() {
           {data.recommendations.length > 0 && (
             <Card>
               <CardTitle className="mb-3">动作建议</CardTitle>
-              {data.recommendations.map((rec, i) => (
-                <div
-                  key={i}
-                  className="border border-slate-200 rounded-lg p-3 mb-2"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium">{rec.title}</span>
-                    {rec.requires_manual_review && (
-                      <span className="text-xs bg-red-50 text-red-600 px-1.5 py-0.5 rounded">
-                        需复核
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mb-1">{rec.why}</p>
-                  <div className="flex justify-between text-xs text-slate-400">
-                    <span>预期: {
-                      typeof rec.expected_benefit === 'string'
-                        ? rec.expected_benefit
-                        : rec.expected_benefit?.description
-                          ? `${rec.expected_benefit.description}${rec.expected_benefit.cash_relief ? `（¥${rec.expected_benefit.cash_relief.toLocaleString()}）` : ''}`
-                          : '暂无'
-                    }</span>
-                    <span>置信度: {(rec.confidence * 100).toFixed(0)}%</span>
-                  </div>
-                  {rec.evidence_ids && (
-                    <div className="flex gap-1 mt-1">
-                      {rec.evidence_ids.map((eid) => (
-                        <button
-                          key={eid}
-                          className="text-xs text-blue-500 hover:underline cursor-pointer"
-                          onClick={() => scrollToEvidence(eid)}
-                        >
-                          {eid}
-                        </button>
-                      ))}
-                  </div>
-                  )}
-                </div>
-              ))}
+              <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+                {data.recommendations.map((rec, i) => {
+                  const confidence = rec.confidence ?? 0;
+                  const isHighConf = confidence >= 0.8;
+                  const isMedConf = confidence >= 0.5 && confidence < 0.8;
+                  const borderColor = isHighConf
+                    ? "border-l-red-400"
+                    : isMedConf
+                    ? "border-l-amber-400"
+                    : "border-l-slate-300";
+                  const confColor = isHighConf
+                    ? "text-red-600 bg-red-50"
+                    : isMedConf
+                    ? "text-amber-600 bg-amber-50"
+                    : "text-slate-500 bg-slate-50";
+
+                  return (
+                    <div
+                      key={i}
+                      className={`border border-slate-200 border-l-[3px] ${borderColor} rounded-lg p-3`}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${confColor}`}>
+                          {(confidence * 100).toFixed(0)}%
+                        </span>
+                        <span className="text-sm font-medium flex-1">{rec.title}</span>
+                        {rec.requires_manual_review && (
+                          <span className="text-xs bg-red-50 text-red-600 px-1.5 py-0.5 rounded font-medium">
+                            需复核
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mb-1.5 leading-relaxed">{rec.why}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400">预期: {
+                          typeof rec.expected_benefit === 'string'
+                            ? rec.expected_benefit
+                            : rec.expected_benefit?.description
+                              ? `${rec.expected_benefit.description}${rec.expected_benefit.cash_relief ? `（¥${rec.expected_benefit.cash_relief.toLocaleString()}）` : ''}`
+                              : '暂无'
+                        }</span>
+                        {rec.evidence_ids && rec.evidence_ids.length > 0 && (
+                          <div className="flex gap-1">
+                            {rec.evidence_ids.map((eid) => (
+                              <button
+                                key={eid}
+                                className="text-xs text-blue-500 hover:underline cursor-pointer"
+                                onClick={() => scrollToEvidence(eid)}
+                              >
+                                {eid}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </Card>
           )}
         </div>
