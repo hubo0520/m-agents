@@ -2,13 +2,194 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════
+   设计系统 Token — CSS 变量
+   ═══════════════════════════════════════════════════ */
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-rgb: 248, 250, 252;
+  /* ── 主色 ── */
+  --color-primary: 59 130 246;        /* blue-500 */
+  --color-primary-hover: 37 99 235;   /* blue-600 */
+  --color-primary-light: 239 246 255; /* blue-50 */
+
+  /* ── 中性色 ── */
+  --color-foreground: 15 23 42;       /* slate-900 */
+  --color-muted: 100 116 139;        /* slate-500 */
+  --color-muted-light: 148 163 184;  /* slate-400 */
+  --color-border: 226 232 240;       /* slate-200 */
+  --color-border-light: 241 245 249; /* slate-100 */
+  --color-background: 248 250 252;   /* slate-50 */
+  --color-surface: 255 255 255;      /* white */
+
+  /* ── 语义色 ── */
+  --color-success: 34 197 94;        /* green-500 */
+  --color-success-light: 240 253 244;/* green-50 */
+  --color-warning: 234 179 8;        /* yellow-500 */
+  --color-warning-light: 254 252 232;/* yellow-50 */
+  --color-danger: 239 68 68;         /* red-500 */
+  --color-danger-light: 254 242 242; /* red-50 */
+  --color-info: 99 102 241;          /* indigo-500 */
+  --color-info-light: 238 242 255;   /* indigo-50 */
+
+  /* ── 间距阶梯 (4px 基准) ── */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── 圆角阶梯 ── */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ── 阴影阶梯 ── */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.03);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.03);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.03);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.03);
+
+  /* ── 字体层级 ── */
+  --font-xs: 0.75rem;    /* 12px */
+  --font-sm: 0.8125rem;  /* 13px */
+  --font-base: 0.875rem; /* 14px */
+  --font-md: 1rem;       /* 16px */
+  --font-lg: 1.125rem;   /* 18px */
+  --font-xl: 1.25rem;    /* 20px */
+  --font-2xl: 1.5rem;    /* 24px */
+  --font-3xl: 1.875rem;  /* 30px */
+
+  /* ── 侧边栏 ── */
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 64px;
 }
 
+/* ═══════════════════════════════════════════════════
+   全局基础样式
+   ═══════════════════════════════════════════════════ */
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: rgb(var(--color-foreground));
+  background: rgb(var(--color-background));
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: var(--font-base);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── 全局过渡 ── */
+*, *::before, *::after {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 排除不需要过渡的元素 */
+[data-no-transition], [data-no-transition] * {
+  transition: none !important;
+}
+
+/* ── 全局 focus 样式 ── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--color-surface)), 0 0 0 4px rgb(var(--color-primary) / 0.4);
+  border-radius: var(--radius-sm);
+}
+
+/* ── 输入框/选择器统一 focus ── */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: rgb(var(--color-primary));
+  box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.12);
+}
+
+/* ── 滚动条美化 ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-muted-light) / 0.5);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-muted) / 0.5);
+}
+
+/* ═══════════════════════════════════════════════════
+   工具类
+   ═══════════════════════════════════════════════════ */
+
+/* 表格行 hover 效果 — 用首列 td 的 box-shadow 模拟左侧指示条 */
+@layer utilities {
+  .table-row-hover {
+    @apply hover:bg-slate-50/80 transition-colors;
+  }
+  .table-row-hover:hover > td:first-child {
+    box-shadow: inset 2px 0 0 0 rgb(59 130 246);
+  }
+}
+
+/* 卡片 hover 悬浮效果 */
+@layer utilities {
+  .card-hover {
+    @apply transition-all duration-200;
+  }
+  .card-hover:hover {
+    @apply shadow-md -translate-y-0.5;
+  }
+}
+
+/* 淡入动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideOutRight {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-fade-in-overlay {
+  animation: fadeInOverlay 0.2s ease-out;
+}
+
+/* ── 表单输入框统一样式 ── */
+.form-input {
+  @apply w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50/50;
+  @apply focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10;
+  @apply outline-none transition-all placeholder:text-slate-300;
 }

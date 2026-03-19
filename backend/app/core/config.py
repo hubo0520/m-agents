@@ -27,11 +27,20 @@ class Settings(BaseSettings):
     MEDIUM_RISK_AMPLIFICATION: float = 1.3
     MEDIUM_RISK_DELAY: float = 2.0
 
-    # LLM 配置
+    # LLM 配置（从 .env 文件读取）
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     OPENAI_MODEL: str = "qwen-plus"
     USE_LLM: bool = True
+
+    # JWT 认证（从 .env 文件读取，务必使用强随机密钥）
+    JWT_SECRET_KEY: str = ""
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # 调试模式（开启后允许 Header 传角色）
+    DEBUG_AUTH: bool = True
 
     # 经营贷资格
     MIN_OPERATION_DAYS: int = 60

@@ -7,19 +7,12 @@ import type {
   DashboardStats,
   ReviewRequest,
 } from "@/types";
+import { authFetch } from "./api-client";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`API error ${res.status}: ${detail}`);
-  }
-  return res.json();
+  return authFetch<T>(path, options);
 }
 
 /* 看板指标 */
@@ -81,8 +74,13 @@ export async function exportCase(
   caseId: number,
   format: "markdown" | "json"
 ): Promise<string | object> {
+  const { getAccessToken } = await import("./auth");
+  const token = getAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(
-    `${API_BASE}/api/risk-cases/${caseId}/export?format=${format}`
+    `${API_BASE}/api/risk-cases/${caseId}/export?format=${format}`,
+    { headers }
   );
   if (!res.ok) throw new Error(`导出失败: ${res.status}`);
   if (format === "json") return res.json();

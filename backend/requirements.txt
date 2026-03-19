@@ -9,3 +9,7 @@ openai>=1.40.0
 # V3: LangGraph 编排引擎
 langgraph>=0.2.0
 langgraph-checkpoint-sqlite>=1.0.0
+# V3: 认证
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt==4.0.1

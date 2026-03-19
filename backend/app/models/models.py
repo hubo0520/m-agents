@@ -1,7 +1,7 @@
 """数据库模型 — V1/V2 核心业务表 + V3 多 Agent 生产化表"""
 from datetime import datetime, date
 from sqlalchemy import (
-    Column, Integer, String, Float, Text, DateTime, Date,
+    Column, Integer, String, Float, Text, DateTime, Date, Boolean,
     ForeignKey, Index, Enum as SAEnum,
 )
 from sqlalchemy.orm import relationship
@@ -107,6 +107,23 @@ class PromptVersionStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
     ARCHIVED = "ARCHIVED"
+
+
+# ─────────────────────── 0. users (认证) ───────────────────────
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(64), unique=True, nullable=False, index=True)
+    display_name = Column(String(128), nullable=False)
+    password_hash = Column(String(256), nullable=False)
+    role = Column(String(32), nullable=False, default="risk_ops")  # 对应 Role 枚举
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_superadmin = Column(Boolean, nullable=False, default=False)
+    last_login_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 # ─────────────────────── 1. merchants ───────────────────────

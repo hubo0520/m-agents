@@ -12,6 +12,9 @@ import {
 import type { CaseDetail, ReviewRequest, UnifiedTask } from "@/types";
 import { getCaseStatusLabel, getCaseStatusColor, getTaskStatusLabel, getTaskStatusColor, getAuditActionLabel, parseAuditValue, getEvidenceTypeLabel, formatEvidenceSummary } from "@/lib/constants";
 import Link from "next/link";
+import { Badge } from "@/components/ui/Badge";
+import { Card, CardTitle } from "@/components/ui/Card";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   LineChart,
   Line,
@@ -28,23 +31,30 @@ import {
 
 /* ────────── 辅助组件 ────────── */
 function RiskBadge({ level }: { level: string }) {
-  const styles: Record<string, string> = {
-    high: "bg-red-100 text-red-700 border-red-200",
-    medium: "bg-amber-100 text-amber-700 border-amber-200",
-    low: "bg-green-100 text-green-700 border-green-200",
+  const variantMap: Record<string, "danger" | "warning" | "success"> = {
+    high: "danger",
+    medium: "warning",
+    low: "success",
   };
   return (
-    <span className={`px-3 py-1 rounded-full text-sm font-semibold border ${styles[level] || "bg-gray-100"}`}>
+    <Badge variant={variantMap[level] || "muted"} size="md" dot>
       {level.toUpperCase()}
-    </span>
+    </Badge>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const getVariant = (s: string) => {
+    if (["APPROVED", "COMPLETED", "REVIEWED"].includes(s)) return "success";
+    if (["PENDING_APPROVAL", "PENDING_REVIEW", "NEW"].includes(s)) return "warning";
+    if (["REJECTED", "FAILED_RETRYABLE", "FAILED_FINAL"].includes(s)) return "danger";
+    if (["ANALYZING", "RECOMMENDING", "EXECUTING"].includes(s)) return "info";
+    return "default";
+  };
   return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${getCaseStatusColor(status)}`}>
+    <Badge variant={getVariant(status) as any} size="sm">
       {getCaseStatusLabel(status)}
-    </span>
+    </Badge>
   );
 }
 
@@ -92,8 +102,8 @@ function ReviewDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/30" onClick={onClose} />
-      <div className="w-[480px] bg-white shadow-xl overflow-y-auto p-6">
+      <div className="flex-1 bg-black/20 animate-fade-in-overlay" onClick={onClose} />
+      <div className="w-[480px] bg-white shadow-xl overflow-y-auto p-6 animate-slide-in-right">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-bold">审批案件</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
@@ -252,66 +262,75 @@ export default function CaseDetailPage() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-slate-400">加载中...</div>;
-  if (!data) return <div className="p-8 text-center text-red-500">案件不存在</div>;
+  if (loading) return <Spinner label="加载案件详情..." />;
+  if (!data) return (
+    <div className="flex flex-col items-center justify-center py-20">
+      <p className="text-sm text-red-500">案件不存在</p>
+    </div>
+  );
 
   const agentOutput = data.agent_output;
   const forecast = data.forecast;
 
   return (
-    <div>
+    <div className="animate-fade-in">
       {/* 面包屑导航 + 操作按钮 */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-2">
+      <div className="flex justify-between items-center mb-8">
+        <div className="flex items-center gap-3">
           <button
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm text-slate-500 hover:text-blue-600 transition-colors"
             onClick={() => router.push("/")}
           >
-            ← 返回看板
+            ← 风险指挥台
           </button>
-          <span className="text-slate-300">/</span>
-          <span className="text-sm text-slate-600">案件 RC-{caseId.toString().padStart(4, "0")}</span>
+          <span className="text-slate-200">/</span>
+          <span className="text-sm font-medium text-slate-800">案件 RC-{caseId.toString().padStart(4, "0")}</span>
           <RiskBadge level={data.risk_level} />
           <StatusBadge status={data.status} />
         </div>
         <div className="flex gap-2">
           <button
-            className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-slate-50"
+            className="px-3.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-40"
             onClick={handleAnalyze}
             disabled={analyzing}
           >
-            {analyzing ? "分析中..." : "🔄 重新分析"}
+            {analyzing ? (
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-full border border-slate-300 border-t-blue-600 animate-spin" />
+                分析中
+              </span>
+            ) : "🔄 重新分析"}
           </button>
           {data.status === "ANALYZED" && (
             <button
-              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-3.5 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               onClick={() => setShowReview(true)}
             >
               📋 审批
             </button>
           )}
           <button
-            className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-slate-50"
+            className="px-3.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all"
             onClick={() => handleExport("markdown")}
           >
-            📥 导出 MD
+            📥 MD
           </button>
           <button
-            className="px-3 py-1.5 text-sm border border-slate-300 rounded hover:bg-slate-50"
+            className="px-3.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all"
             onClick={() => handleExport("json")}
           >
-            📥 导出 JSON
+            📥 JSON
           </button>
         </div>
       </div>
 
       {/* 左右分栏 */}
-      <div className="grid grid-cols-5 gap-6 mb-6">
+      <div className="grid grid-cols-5 gap-6 mb-8">
         {/* 左侧 — 60% */}
-        <div className="col-span-3 space-y-6">
+        <div className="col-span-3 space-y-5">
           {/* 商家基本信息 */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <h3 className="text-sm font-medium text-slate-600 mb-3">商家信息</h3>
+          <Card>
+            <CardTitle className="mb-4">商家信息</CardTitle>
             <div className="grid grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-slate-400">名称</span>
@@ -330,45 +349,45 @@ export default function CaseDetailPage() {
                 <p className="font-medium">{data.merchant.settlement_cycle_days}天</p>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* 风险评分拆解 */}
           {data.metrics && (
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <h3 className="text-sm font-medium text-slate-600 mb-3">风险评分拆解</h3>
-              <div className="grid grid-cols-4 gap-4 text-sm">
-                <div className="text-center p-3 bg-slate-50 rounded">
+            <Card>
+              <CardTitle className="mb-4">风险评分拆解</CardTitle>
+              <div className="grid grid-cols-4 gap-3 text-sm">
+                <div className="text-center p-3 bg-slate-50/80 rounded-lg">
                   <p className="text-xs text-slate-400 mb-1">退货率放大</p>
                   <p className="text-xl font-bold text-orange-600">
                     {data.metrics.return_amplification ?? "-"}x
                   </p>
                 </div>
-                <div className="text-center p-3 bg-slate-50 rounded">
+                <div className="text-center p-3 bg-slate-50/80 rounded-lg">
                   <p className="text-xs text-slate-400 mb-1">回款延迟</p>
                   <p className="text-xl font-bold text-amber-600">
                     {data.metrics.avg_settlement_delay ?? "-"}天
                   </p>
                 </div>
-                <div className="text-center p-3 bg-slate-50 rounded">
+                <div className="text-center p-3 bg-slate-50/80 rounded-lg">
                   <p className="text-xs text-slate-400 mb-1">7日退款压力</p>
                   <p className="text-xl font-bold text-red-600">
                     ¥{(data.metrics.refund_pressure_7d ?? 0).toLocaleString()}
                   </p>
                 </div>
-                <div className="text-center p-3 bg-slate-50 rounded">
+                <div className="text-center p-3 bg-slate-50/80 rounded-lg">
                   <p className="text-xs text-slate-400 mb-1">异常分数</p>
                   <p className="text-xl font-bold text-purple-600">
                     {(data.metrics.anomaly_score ?? 0).toFixed(2)}
                   </p>
                 </div>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* 30天趋势图 */}
           {data.trend_data && data.trend_data.length > 0 && (
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <h3 className="text-sm font-medium text-slate-600 mb-3">近30天趋势</h3>
+            <Card>
+              <CardTitle className="mb-4">近30天趋势</CardTitle>
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={data.trend_data}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -402,13 +421,13 @@ export default function CaseDetailPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
           )}
 
           {/* 14日现金流预测图 */}
           {forecast && forecast.daily_forecast && (
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <h3 className="text-sm font-medium text-slate-600 mb-1">14日现金流预测</h3>
+            <Card>
+              <CardTitle>14日现金流预测</CardTitle>
               <p className="text-xs text-slate-400 mb-3">
                 预测缺口: ¥{forecast.predicted_gap?.toLocaleString() ?? 0} |
                 最低现金日: {forecast.lowest_cash_day ?? "-"} |
@@ -426,28 +445,30 @@ export default function CaseDetailPage() {
                   <ReferenceLine y={0} stroke="#6b7280" />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
           )}
         </div>
 
         {/* 右侧 — 40% */}
-        <div className="col-span-2 space-y-6">
+        <div className="col-span-2 space-y-5">
           {/* Agent 案件总结 */}
           {data.status === "NEW" ? (
-            <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
-              <p className="text-slate-400 mb-3">待分析</p>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={handleAnalyze}
-                disabled={analyzing}
-              >
-                {analyzing ? "分析中..." : "开始分析"}
-              </button>
-            </div>
+            <Card className="text-center">
+              <div className="py-4">
+                <p className="text-slate-400 mb-4 text-sm">待分析</p>
+                <button
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40"
+                  onClick={handleAnalyze}
+                  disabled={analyzing}
+                >
+                  {analyzing ? "分析中..." : "开始分析"}
+                </button>
+              </div>
+            </Card>
           ) : agentOutput ? (
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <Card>
               <div className="flex items-center gap-2 mb-3">
-                <h3 className="text-sm font-medium text-slate-600">Agent 案件总结</h3>
+                <CardTitle>Agent 案件总结</CardTitle>
                 <RiskBadge level={agentOutput.risk_level} />
                 {agentOutput.manual_review_required && (
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded">需人工复核</span>
@@ -479,15 +500,15 @@ export default function CaseDetailPage() {
                       </div>
                     </div>
                   ))}
-                </div>
+                  ))}n                </div>
               )}
-            </div>
+            </Card>
           ) : null}
 
           {/* 动作建议列表 */}
           {data.recommendations.length > 0 && (
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <h3 className="text-sm font-medium text-slate-600 mb-3">动作建议</h3>
+            <Card>
+              <CardTitle className="mb-3">动作建议</CardTitle>
               {data.recommendations.map((rec, i) => (
                 <div
                   key={i}
@@ -523,18 +544,19 @@ export default function CaseDetailPage() {
                           {eid}
                         </button>
                       ))}
-                    </div>
+                  </div>
                   )}
                 </div>
               ))}
-            </div>
+            </Card>
           )}
         </div>
       </div>
 
       {/* V2: 已自动生成执行任务提示条 */}
       {caseTasks.length > 0 && data.status === "APPROVED" && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 flex items-center justify-between">
+        <Card className="!bg-blue-50 !border-blue-200/60 mb-6" padding="none">
+        <div className="px-5 py-3.5 flex items-center justify-between">
           <span className="text-sm text-blue-700">
             ✅ 已自动生成 {caseTasks.length} 条执行任务
           </span>
@@ -545,13 +567,14 @@ export default function CaseDetailPage() {
             查看任务 →
           </button>
         </div>
+        </Card>
       )}
 
       {/* V2: 执行任务 Tab */}
       {showTasksTab && caseTasks.length > 0 && (
-        <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-slate-600">执行任务</h3>
+        <Card className="mb-6" padding="none">
+          <div className="flex items-center justify-between px-5 py-4">
+            <CardTitle>执行任务</CardTitle>
             <button
               className="text-xs text-slate-400 hover:text-slate-600"
               onClick={() => setShowTasksTab(false)}
@@ -560,14 +583,14 @@ export default function CaseDetailPage() {
             </button>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="text-left px-3 py-2 text-slate-500 text-xs">类型</th>
-                <th className="text-left px-3 py-2 text-slate-500 text-xs">状态</th>
-                <th className="text-left px-3 py-2 text-slate-500 text-xs">金额</th>
-                <th className="text-left px-3 py-2 text-slate-500 text-xs">负责人</th>
-                <th className="text-left px-3 py-2 text-slate-500 text-xs">创建时间</th>
-                <th className="text-left px-3 py-2 text-slate-500 text-xs">操作</th>
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">类型</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">状态</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">金额</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">负责人</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">创建时间</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -582,25 +605,27 @@ export default function CaseDetailPage() {
                   task.task_type === "claim" ? `/tasks/claims/${task.task_id}` :
                   `/tasks/reviews/${task.task_id}`;
                 return (
-                  <tr key={`${task.task_type}-${task.task_id}`} className="border-t border-slate-100">
-                    <td className="px-3 py-2">{typeLabels[task.task_type] || task.task_type}</td>
-                    <td className="px-3 py-2">
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${getTaskStatusColor(task.status)}`}>{getTaskStatusLabel(task.status)}</span>
+                  <tr key={`${task.task_type}-${task.task_id}`} className="border-b border-slate-50 table-row-hover">
+                    <td className="px-5 py-3.5">{typeLabels[task.task_type] || task.task_type}</td>
+                    <td className="px-5 py-3.5">
+                      <Badge variant={task.status === "COMPLETED" || task.status === "APPROVED" ? "success" : task.status === "REJECTED" ? "danger" : "warning"} size="sm">
+                        {getTaskStatusLabel(task.status)}
+                      </Badge>
                     </td>
-                    <td className="px-3 py-2">{task.amount !== null ? `¥${task.amount.toLocaleString()}` : "-"}</td>
-                    <td className="px-3 py-2 text-xs">{task.assigned_to || "-"}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500">
+                    <td className="px-5 py-3.5 tabular-nums">{task.amount !== null ? `¥${task.amount.toLocaleString()}` : "-"}</td>
+                    <td className="px-5 py-3.5 text-slate-600 text-xs">{task.assigned_to || "-"}</td>
+                    <td className="px-5 py-3.5 text-slate-400 text-xs">
                       {task.created_at ? new Date(task.created_at).toLocaleDateString("zh-CN") : "-"}
                     </td>
-                    <td className="px-3 py-2">
-                      <Link href={detailPath} className="text-xs text-blue-600 hover:underline">查看</Link>
+                    <td className="px-5 py-3.5">
+                      <Link href={detailPath} className="text-xs px-3 py-1.5 rounded-md text-blue-600 hover:bg-blue-50 font-medium transition-colors">查看</Link>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
 
       {/* 执行任务 Tab 切换按钮（当有任务但未展开时） */}
@@ -619,8 +644,8 @@ export default function CaseDetailPage() {
       <div className="space-y-6">
         {/* 证据链时间线 */}
         {data.evidence.length > 0 && (
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <h3 className="text-sm font-medium text-slate-600 mb-3">证据链</h3>
+          <Card>
+            <CardTitle className="mb-4">证据链</CardTitle>
             <div className="space-y-2">
               {data.evidence.map((ev, idx) => {
                 const evLabel = `EV-${101 + idx}`;
@@ -657,13 +682,13 @@ export default function CaseDetailPage() {
                 );
               })}
             </div>
-          </div>
+          </Card>
         )}
 
         {/* 审计记录 */}
         {data.audit_logs.length > 0 && (
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <h3 className="text-sm font-medium text-slate-600 mb-3">审计记录</h3>
+          <Card>
+            <CardTitle className="mb-4">审计记录</CardTitle>
             <div className="space-y-3">
               {data.audit_logs.map((log) => {
                 const oldParts = parseAuditValue(log.old_value);
@@ -716,7 +741,7 @@ export default function CaseDetailPage() {
                 );
               })}
             </div>
-          </div>
+          </Card>
         )}
       </div>
 

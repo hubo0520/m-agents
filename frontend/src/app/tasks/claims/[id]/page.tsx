@@ -5,6 +5,9 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getTaskDetail, updateTaskStatus } from "@/lib/api";
 import { getTaskStatusLabel, getTaskStatusColor, getEvidenceTypeLabel, formatEvidenceSummary } from "@/lib/constants";
+import { Card, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Spinner } from "@/components/ui/Spinner";
 import type { ClaimApplication } from "@/types";
 
 export default function ClaimDetailPage() {
@@ -49,11 +52,7 @@ export default function ClaimDetailPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    );
+    return <Spinner label="加载理赔详情..." />;
   }
 
   if (!task) {
@@ -63,33 +62,33 @@ export default function ClaimDetailPage() {
   const returnDetails = task.return_details;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto animate-fade-in">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-slate-500 mb-6">
-        <Link href="/tasks" className="hover:text-blue-600">任务管理</Link>
-        <span>/</span>
-        <span className="text-slate-800">理赔申请 #{task.id}</span>
+        <Link href="/tasks" className="hover:text-blue-600 transition-colors">任务管理</Link>
+        <span className="text-slate-300">/</span>
+        <span className="text-slate-800 font-medium">理赔申请 #{task.id}</span>
       </div>
 
       {/* 状态条 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+      <Card className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">🛡️ 理赔申请草稿</h2>
+            <h2 className="text-xl font-semibold text-slate-800">🛡️ 理赔申请草稿</h2>
             <p className="text-sm text-slate-500 mt-1">
               案件 #{task.case_id} · {task.merchant_name}
             </p>
           </div>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTaskStatusColor(task.claim_status)}`}>
+          <Badge variant={task.claim_status === "APPROVED" ? "success" : task.claim_status === "REJECTED" ? "danger" : "warning"} size="md" dot>
             {getTaskStatusLabel(task.claim_status)}
-          </span>
+          </Badge>
         </div>
-      </div>
+      </Card>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-5">
         {/* 理赔信息 */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-base font-semibold text-slate-700 mb-4">💵 理赔信息</h3>
+        <Card>
+          <CardTitle className="mb-4">💵 理赔信息</CardTitle>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-sm text-slate-500">理赔金额</span>
@@ -110,11 +109,11 @@ export default function ClaimDetailPage() {
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
         {/* 退货详情 */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-base font-semibold text-slate-700 mb-4">📦 退货详情</h3>
+        <Card>
+          <CardTitle className="mb-4">📦 退货详情</CardTitle>
           {returnDetails ? (
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -144,11 +143,11 @@ export default function ClaimDetailPage() {
           ) : (
             <p className="text-sm text-slate-400">无退货数据</p>
           )}
-        </div>
+        </Card>
 
         {/* 证据列表 */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 col-span-2">
-          <h3 className="text-base font-semibold text-slate-700 mb-4">📎 关联证据</h3>
+        <Card className="col-span-2">
+          <CardTitle className="mb-4">📎 关联证据</CardTitle>
           {task.evidence_snapshot && Array.isArray(task.evidence_snapshot) && task.evidence_snapshot.length > 0 ? (
             <div className="space-y-2">
               {task.evidence_snapshot.map((ev: any, idx: number) => (
@@ -168,17 +167,17 @@ export default function ClaimDetailPage() {
           ) : (
             <p className="text-sm text-slate-400">无证据数据</p>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* 操作区 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mt-6">
-        <h3 className="text-base font-semibold text-slate-700 mb-4">⚡ 操作</h3>
+      <Card className="mt-5">
+        <CardTitle className="mb-4">⚡ 操作</CardTitle>
         <textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           placeholder="输入备注..."
-          className="w-full border border-slate-300 rounded-lg p-3 text-sm mb-4 resize-none"
+          className="w-full border border-slate-200 rounded-lg p-3 text-sm mb-4 resize-none hover:border-slate-300 placeholder:text-slate-300"
           rows={2}
         />
         <div className="flex gap-3">
@@ -186,9 +185,9 @@ export default function ClaimDetailPage() {
             <button
               onClick={() => handleStatusChange("PENDING_REVIEW")}
               disabled={actionLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
             >
-              提交审核
+              {actionLoading ? "处理中..." : "提交审核"}
             </button>
           )}
           {task.claim_status === "PENDING_REVIEW" && (
@@ -196,27 +195,27 @@ export default function ClaimDetailPage() {
               <button
                 onClick={() => handleStatusChange("APPROVED")}
                 disabled={actionLoading}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-40 transition-colors"
               >
-                审核通过
+                {actionLoading ? "处理中..." : "审核通过"}
               </button>
               <button
                 onClick={() => handleStatusChange("REJECTED")}
                 disabled={actionLoading}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-40 transition-colors"
               >
-                驳回
+                {actionLoading ? "处理中..." : "驳回"}
               </button>
             </>
           )}
           <Link
             href={`/cases/${task.case_id}`}
-            className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+            className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all"
           >
             查看关联案件
           </Link>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

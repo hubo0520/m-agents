@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { getApprovalDetail, approveTask, rejectTask, reviseAndApprove } from "@/lib/api";
 import { getRoleName, getApprovalTypeLabel, getApprovalStatusLabel, getApprovalStatusColor, APPROVAL_TYPE_MAP } from "@/lib/constants";
 import type { ApprovalTask } from "@/types";
+import { Badge } from "@/components/ui/Badge";
+import { Card, CardTitle } from "@/components/ui/Card";
+import { Spinner } from "@/components/ui/Spinner";
 
 /** 解析 payload_json 并渲染为可读卡片 */
 function PayloadCard({ raw }: { raw: string | null | undefined }) {
@@ -184,55 +187,68 @@ export default function ApprovalDetailPage() {
     router.push("/approvals");
   };
 
-  if (loading) return <div className="p-6">加载中...</div>;
-  if (!task) return <div className="p-6">审批任务不存在</div>;
+  if (loading) return <Spinner label="加载审批详情..." />;
+  if (!task) return (
+    <div className="flex flex-col items-center justify-center py-20">
+      <p className="text-sm text-slate-500">审批任务不存在</p>
+    </div>
+  );
 
   const isPending = task.status === "PENDING" || task.status === "OVERDUE";
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <button onClick={() => router.back()} className="text-blue-600 hover:underline mb-4 text-sm">
+    <div className="max-w-4xl mx-auto animate-fade-in">
+      <button onClick={() => router.back()} className="text-sm text-slate-500 hover:text-blue-600 transition-colors mb-6 inline-block">
         ← 返回审批列表
       </button>
 
-      <h1 className="text-2xl font-bold mb-6">审批详情 #{task.id}</h1>
+      <div className="flex items-center gap-3 mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">审批详情 #{task.id}</h1>
+        <Badge variant={task.status === "APPROVED" ? "success" : task.status === "REJECTED" ? "danger" : "warning"} size="md" dot>
+          {getApprovalStatusLabel(task.status)}
+        </Badge>
+      </div>
 
       {/* 基本信息 */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <Card className="mb-6">
         <div className="grid grid-cols-2 gap-4 text-sm">
-          <div><span className="text-gray-500">审批类型：</span>{getApprovalTypeLabel(task.approval_type)}</div>
-          <div><span className="text-gray-500">状态：</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getApprovalStatusColor(task.status)}`}>{getApprovalStatusLabel(task.status)}</span>
+          <div><span className="text-slate-500">审批类型：</span>
+            <Badge variant="info" size="sm" className="ml-1">{getApprovalTypeLabel(task.approval_type)}</Badge>
           </div>
-          <div><span className="text-gray-500">关联案件：</span>#{task.case_id}</div>
-          <div><span className="text-gray-500">分配角色：</span>{task.assignee_role ? getRoleName(task.assignee_role) : "-"}</div>
-          <div><span className="text-gray-500">创建时间：</span>{task.created_at}</div>
-          <div><span className="text-gray-500">到期时间：</span>{task.due_at || "-"}</div>
-          {task.reviewer && <div><span className="text-gray-500">审批人：</span>{task.reviewer}</div>}
-          {task.reviewed_at && <div><span className="text-gray-500">审批时间：</span>{task.reviewed_at}</div>}
+          <div><span className="text-slate-500">状态：</span>
+            <Badge variant={task.status === "APPROVED" ? "success" : task.status === "REJECTED" ? "danger" : "warning"} size="sm" className="ml-1">
+              {getApprovalStatusLabel(task.status)}
+            </Badge>
+          </div>
+          <div><span className="text-slate-500">关联案件：</span>#{task.case_id}</div>
+          <div><span className="text-slate-500">分配角色：</span>{task.assignee_role ? getRoleName(task.assignee_role) : "-"}</div>
+          <div><span className="text-slate-500">创建时间：</span>{task.created_at}</div>
+          <div><span className="text-slate-500">到期时间：</span>{task.due_at || "-"}</div>
+          {task.reviewer && <div><span className="text-slate-500">审批人：</span>{task.reviewer}</div>}
+          {task.reviewed_at && <div><span className="text-slate-500">审批时间：</span>{task.reviewed_at}</div>}
         </div>
-      </div>
+      </Card>
 
       {/* 审批内容 */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-3">审批内容</h2>
+      <Card className="mb-6">
+        <CardTitle className="mb-4">审批内容</CardTitle>
         <PayloadCard raw={task.payload_json} />
-      </div>
+      </Card>
 
       {/* 历史审批意见 */}
       {task.comment && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-3">审批意见</h2>
-          <p className="text-sm text-gray-700">{task.comment}</p>
-        </div>
+        <Card className="mb-6">
+          <CardTitle className="mb-3">审批意见</CardTitle>
+          <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">{task.comment}</p>
+        </Card>
       )}
 
       {/* 操作区域 */}
       {isPending && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">审批操作</h2>
+        <Card>
+          <CardTitle className="mb-4">审批操作</CardTitle>
           <textarea
-            className="w-full border rounded p-3 text-sm mb-4"
+            className="w-full border border-slate-200 rounded-lg p-3 text-sm mb-4 hover:border-slate-300 placeholder:text-slate-300 resize-none"
             rows={3}
             placeholder="输入审批意见（驳回时必填）"
             value={comment}
@@ -242,19 +258,19 @@ export default function ApprovalDetailPage() {
             <button
               onClick={handleApprove}
               disabled={processing}
-              className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+              className="bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
             >
-              批准
+              {processing ? "处理中..." : "批准"}
             </button>
             <button
               onClick={handleReject}
               disabled={processing}
-              className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+              className="bg-red-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-40"
             >
-              驳回
+              {processing ? "处理中..." : "驳回"}
             </button>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -10,6 +10,8 @@ from app.core.database import engine, Base
 from app.api import risk_cases, dashboard, tasks
 # V3: 新增 API 模块
 from app.api import workflows, approvals, configs, evals
+# V3: 认证与用户管理
+from app.api import auth as auth_api, users as users_api
 
 # ── 配置 Logging ──
 logging.basicConfig(
@@ -57,6 +59,10 @@ app.include_router(workflows.router)
 app.include_router(approvals.router)
 app.include_router(configs.router)
 app.include_router(evals.router)
+
+# 注册路由 — 认证与用户管理
+app.include_router(auth_api.router)
+app.include_router(users_api.router)
 
 
 @app.get("/health")

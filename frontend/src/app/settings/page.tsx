@@ -6,10 +6,20 @@ import {
 } from "@/lib/api";
 import { getAgentName } from "@/lib/constants";
 import type { AgentConfig, PromptVersionItem } from "@/types";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Spinner } from "@/components/ui/Spinner";
+import { useAuth } from "@/lib/auth";
+import { UserManagementTab } from "@/components/UserManagementTab";
 
-const TABS = ["Prompt 版本", "Schema 版本", "模型策略", "工具配置", "审批规则"];
+const BASE_TABS = ["Prompt 版本", "Schema 版本", "模型策略", "工具配置", "审批规则"];
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const TABS = isAdmin ? [...BASE_TABS, "用户管理"] : BASE_TABS;
+
   const [activeTab, setActiveTab] = useState(0);
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
   const [promptVersions, setPromptVersions] = useState<PromptVersionItem[]>([]);
@@ -34,79 +44,93 @@ export default function SettingsPage() {
     getPromptVersions(selectedAgent).then((r) => setPromptVersions(r.items || []));
   };
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">规则与模型中心</h1>
+  if (loading) return <Spinner label="加载配置..." />;
 
-      {/* Tab 栏 */}
-      <div className="flex border-b mb-6">
-        {TABS.map((tab, i) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(i)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              activeTab === i ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+  return (
+    <div className="animate-fade-in">
+      <PageHeader
+        title="规则与模型中心"
+        description="管理 Agent 配置、Prompt 版本和审批规则"
+      />
+
+      {/* Tab 栏 — Segment Control 风格 */}
+      <div className="mb-8">
+        <div className="inline-flex bg-slate-100 rounded-lg p-1 gap-0.5">
+          {TABS.map((tab, i) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(i)}
+              className={`px-4 py-2 text-xs font-medium rounded-md transition-all duration-200 ${
+                activeTab === i
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab 内容 */}
       {activeTab === 0 && (
-        <div>
-          <div className="flex gap-4 mb-4">
-            <select
-              className="border rounded px-3 py-2 text-sm"
-              value={selectedAgent}
-              onChange={(e) => setSelectedAgent(e.target.value)}
-            >
-              <option value="">全部 Agent</option>
-              {configs.map((c) => (
-                <option key={c.agent_name} value={c.agent_name}>{getAgentName(c.agent_name)}</option>
-              ))}
-            </select>
-          </div>
+        <div className="space-y-6">
+          <Card padding="none">
+            <div className="px-5 py-4">
+              <select
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[160px] hover:border-slate-300"
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+              >
+                <option value="">全部 Agent</option>
+                {configs.map((c) => (
+                  <option key={c.agent_name} value={c.agent_name}>{getAgentName(c.agent_name)}</option>
+                ))}
+              </select>
+            </div>
+          </Card>
 
-          {/* Prompt 版本列表 */}
-          <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
+          <Card padding="none" className="overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left">Agent</th>
-                  <th className="px-4 py-3 text-left">版本</th>
-                  <th className="px-4 py-3 text-left">状态</th>
-                  <th className="px-4 py-3 text-left">灰度权重</th>
-                  <th className="px-4 py-3 text-left">创建时间</th>
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Agent</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">版本</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">状态</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">灰度权重</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">创建时间</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {promptVersions.map((v) => (
-                  <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">{getAgentName(v.agent_name)}</td>
-                    <td className="px-4 py-3">v{v.version}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        v.status === "ACTIVE" ? "bg-green-100 text-green-800" :
-                        v.status === "DRAFT" ? "bg-yellow-100 text-yellow-800" :
-                        "bg-gray-100 text-gray-800"
-                      }`}>{v.status}</span>
+                  <tr key={v.id} className="border-b border-slate-50 table-row-hover">
+                    <td className="px-5 py-3.5 font-medium text-slate-800">{getAgentName(v.agent_name)}</td>
+                    <td className="px-5 py-3.5 font-mono text-xs text-slate-600">v{v.version}</td>
+                    <td className="px-5 py-3.5">
+                      <Badge
+                        variant={v.status === "ACTIVE" ? "success" : v.status === "DRAFT" ? "warning" : "muted"}
+                        size="sm"
+                        dot
+                      >
+                        {v.status}
+                      </Badge>
                     </td>
-                    <td className="px-4 py-3">{v.canary_weight || 0}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{v.created_at}</td>
+                    <td className="px-5 py-3.5 tabular-nums text-slate-600">{v.canary_weight || 0}</td>
+                    <td className="px-5 py-3.5 text-slate-400 text-xs">{v.created_at}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
 
-          {/* 创建新版本 */}
           {selectedAgent && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-3">创建新 Prompt 版本 ({getAgentName(selectedAgent)})</h3>
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">
+                创建新 Prompt 版本
+                <span className="ml-2 text-slate-400 font-normal">({getAgentName(selectedAgent)})</span>
+              </h3>
               <textarea
-                className="w-full border rounded p-3 text-sm mb-4"
+                className="w-full border border-slate-200 rounded-lg p-3 text-sm mb-4 resize-none hover:border-slate-300 placeholder:text-slate-300"
                 rows={5}
                 placeholder="输入 Prompt 内容..."
                 value={newPrompt}
@@ -114,57 +138,64 @@ export default function SettingsPage() {
               />
               <button
                 onClick={handleCreatePrompt}
-                className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-40"
+                disabled={!newPrompt.trim()}
               >
                 创建版本
               </button>
-            </div>
+            </Card>
           )}
         </div>
       )}
 
       {activeTab === 1 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-500 text-sm">Schema 版本管理 — 请通过 API 管理 Schema 版本。</p>
-        </div>
+        <Card>
+          <p className="text-sm text-slate-400">Schema 版本管理 — 请通过 API 管理 Schema 版本。</p>
+        </Card>
       )}
 
       {activeTab === 2 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-3">Agent 模型配置</h3>
+        <Card padding="none" className="overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-800">Agent 模型配置</h3>
+          </div>
           <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left">Agent</th>
-                <th className="px-4 py-3 text-left">活跃 Prompt</th>
-                <th className="px-4 py-3 text-left">最新 Schema</th>
-                <th className="px-4 py-3 text-left">模型</th>
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Agent</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">活跃 Prompt</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">最新 Schema</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">模型</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {configs.map((c) => (
-                <tr key={c.agent_name} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">{getAgentName(c.agent_name)}</td>
-                  <td className="px-4 py-3">{c.active_prompt_version ? `v${c.active_prompt_version}` : "-"}</td>
-                  <td className="px-4 py-3">{c.latest_schema_version ? `v${c.latest_schema_version}` : "-"}</td>
-                  <td className="px-4 py-3">{c.model_name}</td>
+                <tr key={c.agent_name} className="border-b border-slate-50 table-row-hover">
+                  <td className="px-5 py-3.5 font-medium text-slate-800">{getAgentName(c.agent_name)}</td>
+                  <td className="px-5 py-3.5 font-mono text-xs text-slate-600">{c.active_prompt_version ? `v${c.active_prompt_version}` : "-"}</td>
+                  <td className="px-5 py-3.5 font-mono text-xs text-slate-600">{c.latest_schema_version ? `v${c.latest_schema_version}` : "-"}</td>
+                  <td className="px-5 py-3.5 text-slate-600">{c.model_name}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
 
       {activeTab === 3 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-500 text-sm">工具配置管理 — 可通过 API 管理工具 allowlist 和审批策略。</p>
-        </div>
+        <Card>
+          <p className="text-sm text-slate-400">工具配置管理 — 可通过 API 管理工具 allowlist 和审批策略。</p>
+        </Card>
       )}
 
       {activeTab === 4 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-500 text-sm">审批规则管理 — 可通过 API 配置各类动作的审批要求和 SLA 时间。</p>
-        </div>
+        <Card>
+          <p className="text-sm text-slate-400">审批规则管理 — 可通过 API 配置各类动作的审批要求和 SLA 时间。</p>
+        </Card>
+      )}
+
+      {isAdmin && activeTab === 5 && (
+        <UserManagementTab />
       )}
     </div>
   );

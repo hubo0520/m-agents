@@ -4,41 +4,49 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getTasks } from "@/lib/api";
 import { getTaskStatusLabel, getTaskStatusColor } from "@/lib/constants";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { Spinner } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { UnifiedTask, PaginatedResponse } from "@/types";
 
 /* 状态分组 */
 const STATUS_GROUPS = {
   pending: {
     label: "待处理",
-    color: "bg-amber-50 border-amber-200",
-    headerColor: "bg-amber-100 text-amber-800",
+    color: "border-amber-200/80",
+    headerBg: "bg-amber-50",
+    headerText: "text-amber-800",
+    dotColor: "bg-amber-400",
     statuses: ["DRAFT", "PENDING_REVIEW", "PENDING"],
   },
   in_progress: {
     label: "处理中",
-    color: "bg-blue-50 border-blue-200",
-    headerColor: "bg-blue-100 text-blue-800",
+    color: "border-blue-200/80",
+    headerBg: "bg-blue-50",
+    headerText: "text-blue-800",
+    dotColor: "bg-blue-400",
     statuses: ["IN_PROGRESS", "EXECUTING", "APPROVED"],
   },
   done: {
     label: "已完成",
-    color: "bg-green-50 border-green-200",
-    headerColor: "bg-green-100 text-green-800",
+    color: "border-emerald-200/80",
+    headerBg: "bg-emerald-50",
+    headerText: "text-emerald-800",
+    dotColor: "bg-emerald-400",
     statuses: ["COMPLETED", "CLOSED", "REJECTED"],
   },
 };
 
-const TYPE_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  financing: { label: "融资申请", icon: "💰", color: "bg-purple-100 text-purple-700" },
-  claim: { label: "理赔申请", icon: "🛡️", color: "bg-teal-100 text-teal-700" },
-  manual_review: { label: "人工复核", icon: "👁️", color: "bg-orange-100 text-orange-700" },
+const TYPE_INFO: Record<string, { label: string; icon: string; variant: "info" | "success" | "warning" }> = {
+  financing: { label: "融资申请", icon: "💰", variant: "info" },
+  claim: { label: "理赔申请", icon: "🛡️", variant: "success" },
+  manual_review: { label: "人工复核", icon: "👁️", variant: "warning" },
 };
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {};
-
 function TaskCard({ task }: { task: UnifiedTask }) {
-  const typeInfo = TYPE_LABELS[task.task_type] || { label: task.task_type, icon: "📋", color: "bg-gray-100" };
-  const statusInfo = STATUS_LABELS[task.status] || { label: getTaskStatusLabel(task.status), color: getTaskStatusColor(task.status) };
+  const typeInfo = TYPE_INFO[task.task_type] || { label: task.task_type, icon: "📋", variant: "muted" as const };
 
   const detailPath =
     task.task_type === "financing"
@@ -49,24 +57,26 @@ function TaskCard({ task }: { task: UnifiedTask }) {
 
   return (
     <Link href={detailPath}>
-      <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition-shadow cursor-pointer">
-        <div className="flex items-center justify-between mb-2">
-          <span className={`text-xs px-2 py-0.5 rounded-full ${typeInfo.color}`}>
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group">
+        <div className="flex items-center justify-between mb-3">
+          <Badge variant={typeInfo.variant} size="sm">
             {typeInfo.icon} {typeInfo.label}
-          </span>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${statusInfo.color}`}>
-            {statusInfo.label}
-          </span>
+          </Badge>
+          <Badge variant="muted" size="sm">
+            {getTaskStatusLabel(task.status)}
+          </Badge>
         </div>
-        <h4 className="text-sm font-medium text-slate-800 mb-1">{task.merchant_name}</h4>
-        <div className="text-xs text-slate-500 space-y-0.5">
+        <h4 className="text-sm font-medium text-slate-800 mb-2 group-hover:text-slate-900">{task.merchant_name}</h4>
+        <div className="text-xs text-slate-400 space-y-1">
           {task.amount !== null && (
-            <p>金额: ¥{task.amount.toLocaleString()}</p>
+            <p className="text-slate-600 font-medium">¥{task.amount.toLocaleString()}</p>
           )}
-          {task.assigned_to && task.assigned_to !== "unassigned" && (
-            <p>负责人: {task.assigned_to}</p>
-          )}
-          <p>案件 #{task.case_id}</p>
+          <div className="flex items-center justify-between">
+            <span>案件 #{task.case_id}</span>
+            {task.assigned_to && task.assigned_to !== "unassigned" && (
+              <span className="text-slate-500">{task.assigned_to}</span>
+            )}
+          </div>
           {task.created_at && (
             <p>{new Date(task.created_at).toLocaleDateString("zh-CN")}</p>
           )}
@@ -99,7 +109,6 @@ export default function TasksPage() {
 
   useEffect(() => {
     fetchTasks();
-    // 30秒自动刷新
     const interval = setInterval(fetchTasks, 30000);
     return () => clearInterval(interval);
   }, [fetchTasks]);
@@ -110,57 +119,54 @@ export default function TasksPage() {
     tasks: tasks.filter((t) => group.statuses.includes(t.status)),
   }));
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    );
-  }
+  if (loading) return <Spinner label="加载任务数据..." />;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">📋 任务管理</h2>
-          <p className="text-sm text-slate-500 mt-1">共 {tasks.length} 条任务</p>
-        </div>
-
-        {/* 筛选栏 */}
-        <div className="flex gap-3">
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
-          >
-            <option value="">全部类型</option>
-            <option value="financing">💰 融资申请</option>
-            <option value="claim">🛡️ 理赔申请</option>
-            <option value="manual_review">👁️ 人工复核</option>
-          </select>
-          <input
-            type="text"
-            value={filterAssignee}
-            onChange={(e) => setFilterAssignee(e.target.value)}
-            placeholder="按负责人筛选"
-            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white w-40"
-          />
-        </div>
-      </div>
+    <div className="animate-fade-in">
+      <PageHeader
+        title="任务管理"
+        description={`共 ${tasks.length} 条任务`}
+        actions={
+          <div className="flex gap-3">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[120px] hover:border-slate-300"
+            >
+              <option value="">全部类型</option>
+              <option value="financing">💰 融资申请</option>
+              <option value="claim">🛡️ 理赔申请</option>
+              <option value="manual_review">👁️ 人工复核</option>
+            </select>
+            <input
+              type="text"
+              value={filterAssignee}
+              onChange={(e) => setFilterAssignee(e.target.value)}
+              placeholder="按负责人筛选..."
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-40 hover:border-slate-300 placeholder:text-slate-300"
+            />
+          </div>
+        }
+      />
 
       {/* 看板 */}
       <div className="grid grid-cols-3 gap-6">
         {groupedTasks.map((group) => (
-          <div key={group.key} className={`rounded-xl border ${group.color} min-h-[400px]`}>
-            <div className={`px-4 py-3 rounded-t-xl ${group.headerColor} flex items-center justify-between`}>
-              <span className="font-semibold text-sm">{group.label}</span>
-              <span className="text-xs bg-white/60 px-2 py-0.5 rounded-full">
+          <div key={group.key} className={`rounded-xl border ${group.color} bg-slate-50/50 min-h-[400px]`}>
+            <div className={`px-4 py-3 rounded-t-xl ${group.headerBg} flex items-center justify-between`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${group.dotColor}`} />
+                <span className={`font-semibold text-sm ${group.headerText}`}>{group.label}</span>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full bg-white/60 ${group.headerText} font-medium`}>
                 {group.tasks.length}
               </span>
             </div>
             <div className="p-3 space-y-3">
               {group.tasks.length === 0 ? (
-                <p className="text-center text-sm text-slate-400 py-8">暂无任务</p>
+                <div className="text-center py-10">
+                  <p className="text-sm text-slate-400">暂无任务</p>
+                </div>
               ) : (
                 group.tasks.map((task) => (
                   <TaskCard key={`${task.task_type}-${task.task_id}`} task={task} />

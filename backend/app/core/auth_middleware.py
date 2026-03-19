@@ -1,14 +1,15 @@
 """
 认证与权限中间件
 
-在请求级别校验角色权限。
-当前阶段使用简化实现（Header 传入角色），后续可升级为 JWT。
+支持 JWT Token 认证（主要方式）和 Header 传入角色（仅 DEBUG 模式）。
 """
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.config import settings
 from app.core.rbac import has_permission, Permission, Role
+from app.core.security import decode_token
 
 
 # API 路径 → 所需权限的映射
@@ -45,6 +46,10 @@ PUBLIC_PATHS = {
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/api/auth/login",
+    "/api/auth/refresh",
+    "/api/auth/setup",
+    "/api/auth/check-init",
 }
 
 
@@ -52,11 +57,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
     认证与权限中间件。
 
-    从请求 Header 中获取角色信息：
-    - X-User-Role: 用户角色（如 risk_ops, finance_ops, admin 等）
-    - X-User-Id: 用户 ID
-
-    如果未提供角色，默认作为 admin 处理（开发阶段）。
+    认证优先级：
+    1. Authorization: Bearer <JWT Token>（生产方式）
+    2. X-User-Role Header（仅 DEBUG_AUTH=True 时生效）
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -67,24 +70,51 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
             return await call_next(request)
 
-        # 获取角色信息
-        role = request.headers.get("X-User-Role", "admin")  # 开发阶段默认 admin
-        user_id = request.headers.get("X-User-Id", "anonymous")
+        # ── 方式 1: JWT Token 认证 ──
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            payload = decode_token(token)
+            if not payload:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Token 无效或已过期"},
+                )
+            if payload.get("type") != "access":
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "请使用 Access Token"},
+                )
 
-        # 验证角色有效性
-        try:
-            Role(role)
-        except ValueError:
+            # 注入用户信息
+            request.state.user_id = payload.get("sub")
+            request.state.user_name = payload.get("username")
+            request.state.user_role = payload.get("role", "risk_ops")
+
+        # ── 方式 2: Header 调试模式（仅 DEBUG） ──
+        elif settings.DEBUG_AUTH:
+            role = request.headers.get("X-User-Role", "admin")
+            user_id = request.headers.get("X-User-Id", "anonymous")
+            try:
+                Role(role)
+            except ValueError:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": f"无效的角色: {role}"},
+                )
+            request.state.user_role = role
+            request.state.user_id = user_id
+            request.state.user_name = user_id
+
+        # ── 无认证信息 ──
+        else:
             return JSONResponse(
                 status_code=401,
-                content={"detail": f"无效的角色: {role}"},
+                content={"detail": "未提供认证信息"},
             )
 
-        # 将用户信息存入 request.state
-        request.state.user_role = role
-        request.state.user_id = user_id
-
-        # 权限检查（匹配最接近的路径模式）
+        # 权限检查
+        role = request.state.user_role
         required_perm = _find_required_permission(method, path)
         if required_perm and not has_permission(role, required_perm):
             return JSONResponse(

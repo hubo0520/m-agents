@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getTaskDetail, updateTaskStatus } from "@/lib/api";
+import { Card, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Spinner } from "@/components/ui/Spinner";
 import type { ManualReviewTask } from "@/types";
 
 const REVIEW_RESULTS = [
@@ -61,11 +64,7 @@ export default function ReviewDetailPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    );
+    return <Spinner label="加载复核详情..." />;
   }
 
   if (!task) {
@@ -79,43 +78,42 @@ export default function ReviewDetailPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto animate-fade-in">
       {/* 面包屑 */}
       <div className="flex items-center gap-2 text-sm text-slate-500 mb-6">
-        <Link href="/tasks" className="hover:text-blue-600">任务管理</Link>
-        <span>/</span>
-        <span className="text-slate-800">复核任务 #{task.id}</span>
+        <Link href="/tasks" className="hover:text-blue-600 transition-colors">任务管理</Link>
+        <span className="text-slate-300">/</span>
+        <span className="text-slate-800 font-medium">复核任务 #{task.id}</span>
       </div>
 
       {/* 状态条 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+      <Card className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">👁️ 人工复核任务</h2>
+            <h2 className="text-xl font-semibold text-slate-800">👁️ 人工复核任务</h2>
             <p className="text-sm text-slate-500 mt-1">
               案件 #{task.case_id} · {task.merchant_name}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1 rounded-full text-sm bg-orange-100 text-orange-700">
+          <div className="flex items-center gap-2">
+            <Badge variant="warning" size="md">
               {typeLabels[task.task_type_detail] || task.task_type_detail}
-            </span>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              task.status === "PENDING" ? "bg-amber-100 text-amber-700" :
-              task.status === "IN_PROGRESS" ? "bg-blue-100 text-blue-700" :
-              task.status === "COMPLETED" ? "bg-green-100 text-green-700" :
-              "bg-gray-100 text-gray-500"
-            }`}>
-              {task.status}
-            </span>
+            </Badge>
+            <Badge
+              variant={task.status === "COMPLETED" ? "success" : task.status === "IN_PROGRESS" ? "info" : "warning"}
+              size="md"
+              dot
+            >
+              {task.status === "PENDING" ? "待处理" : task.status === "IN_PROGRESS" ? "处理中" : task.status === "COMPLETED" ? "已完成" : task.status}
+            </Badge>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-5">
         {/* 复核信息 */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-base font-semibold text-slate-700 mb-4">📋 复核信息</h3>
+        <Card>
+          <CardTitle className="mb-4">📋 复核信息</CardTitle>
           <div className="space-y-3 text-sm">
             <div>
               <span className="text-slate-500">复核原因</span>
@@ -131,20 +129,16 @@ export default function ReviewDetailPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">风险等级</span>
-              <span className={`px-2 py-0.5 rounded text-xs ${
-                task.case_risk_level === "high" ? "bg-red-100 text-red-700" :
-                task.case_risk_level === "medium" ? "bg-amber-100 text-amber-700" :
-                "bg-green-100 text-green-700"
-              }`}>
+              <Badge variant={task.case_risk_level === "high" ? "danger" : task.case_risk_level === "medium" ? "warning" : "success"} size="sm">
                 {task.case_risk_level || "unknown"}
-              </span>
+              </Badge>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* 关联证据 */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-base font-semibold text-slate-700 mb-4">📎 关联证据</h3>
+        <Card>
+          <CardTitle className="mb-4">📎 关联证据</CardTitle>
           {task.evidence_ids && task.evidence_ids.length > 0 ? (
             <div className="space-y-2">
               {task.evidence_ids.map((evId: number) => (
@@ -158,12 +152,12 @@ export default function ReviewDetailPage() {
           ) : (
             <p className="text-sm text-slate-400">无关联证据</p>
           )}
-        </div>
+        </Card>
 
         {/* 复核结果（如果已完成） */}
         {task.review_result && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 col-span-2">
-            <h3 className="text-base font-semibold text-slate-700 mb-4">✅ 复核结果</h3>
+          <Card className="col-span-2">
+            <CardTitle className="mb-4">✅ 复核结果</CardTitle>
             <p className="text-sm text-slate-800 bg-green-50 rounded-lg p-3">
               {task.review_result}
             </p>
@@ -172,13 +166,13 @@ export default function ReviewDetailPage() {
                 备注: {task.reviewer_comment}
               </p>
             )}
-          </div>
+          </Card>
         )}
       </div>
 
       {/* 操作区 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mt-6">
-        <h3 className="text-base font-semibold text-slate-700 mb-4">⚡ 操作</h3>
+      <Card className="mt-5">
+        <CardTitle className="mb-4">⚡ 操作</CardTitle>
 
         {task.status === "IN_PROGRESS" && (
           <div className="mb-4">
@@ -186,7 +180,7 @@ export default function ReviewDetailPage() {
             <select
               value={reviewResult}
               onChange={(e) => setReviewResult(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white"
+              className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white hover:border-slate-300"
             >
               <option value="">请选择复核结果...</option>
               {REVIEW_RESULTS.map((r) => (
@@ -200,7 +194,7 @@ export default function ReviewDetailPage() {
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           placeholder="输入备注..."
-          className="w-full border border-slate-300 rounded-lg p-3 text-sm mb-4 resize-none"
+          className="w-full border border-slate-200 rounded-lg p-3 text-sm mb-4 resize-none hover:border-slate-300 placeholder:text-slate-300"
           rows={2}
         />
         <div className="flex gap-3">
@@ -208,28 +202,28 @@ export default function ReviewDetailPage() {
             <button
               onClick={() => handleStatusChange("IN_PROGRESS")}
               disabled={actionLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
             >
-              领取任务
+              {actionLoading ? "处理中..." : "领取任务"}
             </button>
           )}
           {task.status === "IN_PROGRESS" && (
             <button
               onClick={() => handleStatusChange("COMPLETED")}
               disabled={actionLoading || !reviewResult}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-40 transition-colors"
             >
-              提交复核结果
+              {actionLoading ? "处理中..." : "提交复核结果"}
             </button>
           )}
           <Link
             href={`/cases/${task.case_id}`}
-            className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+            className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all"
           >
             查看关联案件
           </Link>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
