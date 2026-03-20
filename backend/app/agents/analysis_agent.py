@@ -132,9 +132,7 @@ def run_diagnosis(agent_input: AgentInput, metrics: dict, evidence: list, on_llm
 # ═══════════════════════════════════════════════════════════════
 
 import json
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list, on_llm_event=None) -> DiagnosisOutput:

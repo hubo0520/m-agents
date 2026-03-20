@@ -6,7 +6,6 @@
 import json
 import time
 import random
-import logging
 import traceback
 import threading
 from datetime import datetime
@@ -14,12 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from sqlalchemy.orm import Session
+from loguru import logger
 
 from app.core.database import get_db, SessionLocal
 from app.core.config import settings
 from app.models.models import EvalDataset, EvalRun, EvalResult, AgentRun, RiskCase
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/evals", tags=["评测中心"])
 

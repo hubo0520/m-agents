@@ -3,6 +3,7 @@
  */
 
 import { getAccessToken, clearTokens, tryRefreshToken } from "./auth";
+import { toast } from "sonner";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
@@ -41,6 +42,7 @@ export async function authFetch<T>(path: string, options?: RequestInit): Promise
     } else {
       // 刷新也失败，清除 Token 并跳转登录
       clearTokens();
+      toast.error("登录已过期，请重新登录");
       if (typeof window !== "undefined") {
         window.location.href = "/login";
       }
@@ -50,7 +52,31 @@ export async function authFetch<T>(path: string, options?: RequestInit): Promise
 
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(`API error ${res.status}: ${detail}`);
+    // 解析后端标准化错误格式
+    let errorMessage = `请求失败 (${res.status})`;
+    try {
+      const parsed = JSON.parse(detail);
+      errorMessage = parsed.detail || parsed.error || errorMessage;
+    } catch {
+      if (detail) errorMessage = detail;
+    }
+
+    // 根据状态码展示不同 Toast
+    if (res.status === 401) {
+      toast.error("登录已过期，请重新登录");
+      clearTokens();
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    } else if (res.status === 403) {
+      toast.error("没有权限执行此操作");
+    } else if (res.status >= 500) {
+      toast.error("服务器错误，请稍后重试");
+    } else if (res.status >= 400) {
+      toast.error(errorMessage);
+    }
+
+    throw new Error(errorMessage);
   }
 
   return res.json();

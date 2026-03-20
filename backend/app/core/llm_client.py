@@ -3,15 +3,13 @@ LLM 客户端 — 统一封装 OpenAI 调用
 
 所有 Agent 通过此模块调用 LLM，确保 OPENAI_BASE_URL / API_KEY / MODEL 统一管理。
 """
-import logging
 from dataclasses import dataclass, asdict
 from typing import Callable, Optional, Type, TypeVar
 
 from pydantic import BaseModel
+from loguru import logger
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 

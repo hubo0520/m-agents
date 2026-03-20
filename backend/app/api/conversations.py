@@ -4,20 +4,18 @@
 import json
 import asyncio
 import time as _time
-import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from loguru import logger
 
 from app.core.database import get_db
 from app.models.models import (
     Conversation, ConversationMessage, RiskCase, EvidenceItem,
 )
 from app.core.llm_client import chat_completion, chat_completion_stream, is_llm_enabled
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["对话式分析"])
 

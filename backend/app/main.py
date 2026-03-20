@@ -1,12 +1,13 @@
 """商家经营保障 Agent V3 — FastAPI 入口"""
-import logging
 import sys
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 
 from app.core.config import settings
 from app.core.database import engine, Base
+from app.core.logging_config import setup_logging
 from app.api import risk_cases, dashboard, tasks
 # V3: 新增 API 模块
 from app.api import workflows, approvals, configs, evals
@@ -16,19 +17,8 @@ from app.api import observability as observability_api
 # V3: 认证与用户管理
 from app.api import auth as auth_api, users as users_api
 
-# ── 配置 Logging ──
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout,
-)
-# 降低第三方库噪音
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("openai").setLevel(logging.WARNING)
-
-logger = logging.getLogger(__name__)
+# 初始化日志配置
+setup_logging()
 
 # 启动时创建所有表
 Base.metadata.create_all(bind=engine)
@@ -89,6 +79,53 @@ app.include_router(observability_api.router)
 @app.get("/health")
 def health_check():
     return {"status": "ok", "version": "3.0.0"}
+
+# 导入异常处理相关模块
+from fastapi import Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+from app.core.exceptions import AppException
+from app.core.error_codes import INTERNAL_SERVER_ERROR, VALIDATION_ERROR
+
+
+# 全局异常处理器
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    """处理自定义应用异常"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.to_dict()
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """处理请求验证错误"""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": VALIDATION_ERROR,
+            "detail": "请求数据验证失败",
+            "status_code": 422,
+            "errors": exc.errors()
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """通用异常兜底处理器"""
+    logger.error(f"未处理的异常: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": INTERNAL_SERVER_ERROR,
+            "detail": "服务器内部错误",
+            "status_code": 500
+        }
+    )
+
 
 # 启动时输出 LLM 配置状态
 logger.info("🚀 应用启动 | USE_LLM=%s | OPENAI_BASE_URL=%s | MODEL=%s",

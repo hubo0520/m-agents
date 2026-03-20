@@ -4,11 +4,9 @@ LangGraph 工作流图定义
 使用 LangGraph StateGraph 构建多 Agent 编排主流程图。
 """
 import json
-import logging
 from datetime import datetime
 from typing import Literal
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 from app.workflow.state import GraphState, WorkflowStatus
 from app.workflow.nodes import (

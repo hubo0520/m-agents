@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { ApprovalTask } from "@/types";
+import { toast } from "sonner";
 
 const STATUS_MAP: Record<string, { label: string; variant: "warning" | "success" | "danger" | "muted" }> = {
   PENDING:  { label: "待审批", variant: "warning" },
@@ -59,14 +60,19 @@ export default function ApprovalsPage() {
 
   const handleBatch = async (action: string) => {
     if (selectedIds.length === 0) return;
-    await batchApprove({
-      approval_ids: selectedIds,
-      action,
-      reviewer_id: "admin",
-      comment: `批量${action === "approve" ? "批准" : "驳回"}`,
-    });
-    setSelectedIds([]);
-    fetchData();
+    try {
+      await batchApprove({
+        approval_ids: selectedIds,
+        action,
+        reviewer_id: "admin",
+        comment: `批量${action === "approve" ? "批准" : "驳回"}`,
+      });
+      toast.success(`批量${action === "approve" ? "批准" : "驳回"}成功，共 ${selectedIds.length} 项`);
+      setSelectedIds([]);
+      fetchData();
+    } catch (err) {
+      toast.error(`批量操作失败: ` + (err as Error).message);
+    }
   };
 
   const getSlaRemaining = (dueAt: string | null) => {

@@ -139,10 +139,8 @@ def _run_rule_guard(recommendation_output: dict) -> GuardOutput:
 # ═══════════════════════════════════════════════════════════════
 
 import json
-import logging
+from loguru import logger
 import re
-
-logger = logging.getLogger(__name__)
 
 
 def _extract_json_from_response(raw: str) -> dict:

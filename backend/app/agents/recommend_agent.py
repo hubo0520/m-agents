@@ -160,9 +160,7 @@ def run_recommendations(
 # ═══════════════════════════════════════════════════════════════
 
 import json
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def _run_recommendations_llm(

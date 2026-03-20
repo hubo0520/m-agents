@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # 调试模式（开启后允许 Header 传角色）
     DEBUG_AUTH: bool = True
 
+    # 日志配置
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "simple"
+
     # 经营贷资格
     MIN_OPERATION_DAYS: int = 60
 

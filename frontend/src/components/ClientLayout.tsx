@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/lib/auth";
 import { AuthGuard } from "@/components/AuthGuard";
 import { Sidebar } from "@/components/ui/Sidebar";
+import { Toaster } from "sonner";
 
 /**
  * 客户端布局组件：
@@ -17,6 +18,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider>
+      <Toaster position="top-right" richColors closeButton duration={4000} />
       {isLoginPage ? (
         // 登录页：无侧边栏，无认证守卫
         <>{children}</>

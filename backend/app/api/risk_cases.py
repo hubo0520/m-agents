@@ -3,12 +3,14 @@ import json
 import asyncio
 import time as _time
 from datetime import datetime, timedelta, date
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse, JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 
 from app.core.database import get_db
+from app.core.exceptions import CaseException
+from app.core.error_codes import CASE_NOT_FOUND, CASE_OPERATION_NOT_ALLOWED, INTERNAL_SERVER_ERROR
 from app.models.models import (
     RiskCase, Merchant, EvidenceItem, Recommendation, Review, AuditLog,
     Order, Return, Settlement,
@@ -126,7 +128,7 @@ def get_risk_case_detail(case_id: int, db: Session = Depends(get_db)):
     """获取案件详情"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     merchant = case.merchant
     evidence = db.query(EvidenceItem).filter(EvidenceItem.case_id == case_id).all()
@@ -226,7 +228,7 @@ def analyze_case(
     """触发重新分析（支持 V1/V2 模式和 V3 工作流模式）"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     try:
         if mode == "v3":
@@ -243,7 +245,7 @@ def analyze_case(
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+        raise CaseException(f"分析失败: {str(e)}", status_code=500)
 
 
 # ─────── GET /api/risk-cases/{case_id}/analysis-progress ─────────
@@ -252,7 +254,7 @@ def get_analysis_progress(case_id: int, db: Session = Depends(get_db)):
     """获取案件分析进度（用于刷新页面后恢复工作流面板）"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     progress = []
     if case.analysis_progress_json:
@@ -277,7 +279,7 @@ async def analyze_case_stream(
     """流式分析：通过 SSE 实时推送分析进度"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     # 使用 asyncio.Queue 在回调和流生成器之间传递事件
     event_queue: asyncio.Queue = asyncio.Queue()
@@ -373,7 +375,7 @@ def get_evidence(case_id: int, db: Session = Depends(get_db)):
 
 # ─────── POST /api/risk-cases/{case_id}/review ─────────
 @router.post("/risk-cases/{case_id}/review")
-def review(case_id: int, req: ReviewRequest, db: Session = Depends(get_db)):
+def review_case(case_id: int, req: ReviewRequest, db: Session = Depends(get_db)):
     """审批案件"""
     try:
         rv = review_case(
@@ -391,10 +393,10 @@ def review(case_id: int, req: ReviewRequest, db: Session = Depends(get_db)):
             "decision": rv.decision,
         }
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise CaseException(str(e), status_code=400)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"审批失败: {str(e)}")
+        raise CaseException(f"审批失败: {str(e)}", status_code=500)
 
 
 # ─────── GET /api/risk-cases/{case_id}/export ─────────
@@ -413,7 +415,7 @@ def export_case(
             data = export_case_json(db, case_id)
             return JSONResponse(content=data)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise CaseException(str(e), status_code=404)
 
 
 # ─────── 辅助函数 ─────────
@@ -511,7 +513,7 @@ def generate_financing(
 
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     merchant = case.merchant
 
@@ -553,7 +555,7 @@ def generate_claim(
     """手动触发理赔申请生成"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     merchant = case.merchant
     body = req or {}
@@ -587,7 +589,7 @@ def generate_manual_review(
     """手动触发复核任务生成"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     merchant = case.merchant
     body = req or {}
@@ -618,7 +620,7 @@ def get_case_tasks(case_id: int, db: Session = Depends(get_db)):
     """查询案件关联的所有执行任务"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
-        raise HTTPException(status_code=404, detail="案件不存在")
+        raise CaseException("案件不存在", status_code=404)
 
     merchant = case.merchant
     tasks = []

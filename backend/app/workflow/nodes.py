@@ -5,12 +5,10 @@
 每个节点接收 GraphState，返回 state 增量更新。
 """
 import json
-import logging
 import time
 import traceback
 from datetime import datetime
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 from app.workflow.state import GraphState, WorkflowStatus
 from app.core.database import SessionLocal

@@ -23,6 +23,7 @@ import type { CaseDetail, ReviewRequest, UnifiedTask } from "@/types";
 import { getCaseStatusLabel, getCaseStatusColor, getTaskStatusLabel, getTaskStatusColor, getAuditActionLabel, parseAuditValue, getEvidenceTypeLabel, formatEvidenceSummary, localizeMetricText, getActionTypeLabel, getActionTypeColor, getRiskLevelLabel } from "@/lib/constants";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
@@ -102,9 +103,11 @@ function ReviewDrawer({
     setSubmitting(true);
     try {
       await onSubmit({ decision, comment, reviewer_id: "operator" });
+      const decisionLabel = decision === "approve" ? "批准" : decision === "reject" ? "驳回" : "修改后批准";
+      toast.success(`审批已${decisionLabel}`);
       onClose();
     } catch (err) {
-      alert("审批失败: " + (err as Error).message);
+      toast.error("审批失败: " + (err as Error).message);
     } finally {
       setSubmitting(false);
     }
@@ -385,6 +388,7 @@ export default function CaseDetailPage() {
       },
       onComplete: async () => {
         setWorkflowComplete(true);
+        toast.success("分析完成");
         // 先获取最新数据，确保 agent_output 已加载，再隐藏工作流面板
         setTimeout(async () => {
           try {
@@ -411,6 +415,7 @@ export default function CaseDetailPage() {
       },
       onError: async (data) => {
         setWorkflowError(data.error);
+        toast.error("分析出错: " + data.error);
         // SSE 失败，降级到轮询模式
         console.warn("SSE 分析失败，降级到轮询模式:", data.error);
         await fallbackPolling();
@@ -547,8 +552,9 @@ export default function CaseDetailPage() {
       a.download = `RC-${caseId.toString().padStart(4, "0")}.${format === "markdown" ? "md" : "json"}`;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success("导出成功");
     } catch (err) {
-      alert("导出失败: " + (err as Error).message);
+      toast.error("导出失败: " + (err as Error).message);
     }
   };
 

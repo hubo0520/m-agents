@@ -1,10 +1,9 @@
 """
 认证 API：系统初始化、注册、登录、Token 刷新、修改密码、获取用户信息
 """
-import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -13,13 +12,18 @@ from app.core.security import (
     create_access_token, create_refresh_token, decode_token,
 )
 from app.core.rbac import Role
+from app.core.exceptions import AuthException
+from app.core.error_codes import (
+    AUTH_INSUFFICIENT_PERMISSIONS, AUTH_INVALID_CREDENTIALS,
+    AUTH_USER_NOT_FOUND, AUTH_USER_DISABLED, VALIDATION_ERROR
+)
 from app.models.models import User
 from app.schemas.auth_schemas import (
     SetupRequest, RegisterRequest, LoginRequest, RefreshRequest,
     ChangePasswordRequest, TokenResponse, UserResponse, MessageResponse,
 )
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 
@@ -49,7 +53,7 @@ def setup(req: SetupRequest, db: Session = Depends(get_db)):
     仅当系统中没有任何用户时可调用。
     """
     if db.query(User).count() > 0:
-        raise HTTPException(status_code=403, detail="系统已初始化")
+        raise AuthException("系统已初始化", status_code=403)
 
     user = User(
         username=req.username,
@@ -75,17 +79,17 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
     # 权限检查
     current_role = getattr(request.state, "user_role", None)
     if current_role != Role.ADMIN.value:
-        raise HTTPException(status_code=403, detail="仅管理员可注册新用户")
+        raise AuthException("仅管理员可注册新用户", status_code=403)
 
     # 验证角色有效性
     try:
         Role(req.role)
     except ValueError:
-        raise HTTPException(status_code=422, detail=f"无效的角色: {req.role}")
+        raise AuthException(f"无效的角色: {req.role}", status_code=422)
 
     # 用户名唯一性检查
     if db.query(User).filter(User.username == req.username).first():
-        raise HTTPException(status_code=409, detail="用户名已存在")
+        raise AuthException("用户名已存在", status_code=409)
 
     user = User(
         username=req.username,
@@ -111,10 +115,10 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
 
     if not user or not verify_password(req.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise AuthException("用户名或密码错误", status_code=401)
 
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
+        raise AuthException("账号已被禁用，请联系管理员", status_code=403)
 
     # 更新最后登录时间
     user.last_login_at = datetime.utcnow()
@@ -132,12 +136,12 @@ def refresh(req: RefreshRequest, db: Session = Depends(get_db)):
     """使用 Refresh Token 获取新的 Access Token"""
     payload = decode_token(req.refresh_token)
     if not payload or payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Refresh Token 无效或已过期")
+        raise AuthException("Refresh Token 无效或已过期", status_code=401)
 
     user_id = payload.get("sub")
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="用户不存在或已禁用")
+        raise AuthException("用户不存在或已禁用", status_code=401)
 
     # 只返回新 Access Token，不轮换 Refresh Token
     new_payload = {"sub": str(user.id), "username": user.username, "role": user.role}
@@ -156,14 +160,14 @@ def change_password(req: ChangePasswordRequest, request: Request, db: Session = 
     """已登录用户修改自己的密码"""
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
-        raise HTTPException(status_code=401, detail="未认证")
+        raise AuthException("未认证", status_code=401)
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise AuthException("用户不存在", status_code=404)
 
     if not verify_password(req.old_password, user.password_hash):
-        raise HTTPException(status_code=400, detail="旧密码错误")
+        raise AuthException("旧密码错误", status_code=400)
 
     user.password_hash = hash_password(req.new_password)
     db.commit()
@@ -179,11 +183,11 @@ def get_me(request: Request, db: Session = Depends(get_db)):
     """获取当前登录用户信息"""
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
-        raise HTTPException(status_code=401, detail="未认证")
+        raise AuthException("未认证", status_code=401)
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise AuthException("用户不存在", status_code=404)
 
     return _user_to_response(user)
 

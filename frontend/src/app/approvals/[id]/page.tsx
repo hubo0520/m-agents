@@ -8,6 +8,7 @@ import type { ApprovalTask } from "@/types";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
+import { toast } from "sonner";
 
 /** 解析 payload_json 并渲染为可读卡片 */
 function PayloadCard({ raw }: { raw: string | null | undefined }) {
@@ -173,18 +174,32 @@ export default function ApprovalDetailPage() {
 
   const handleApprove = async () => {
     setProcessing(true);
-    await approveTask(approvalId, { reviewer_id: "admin", comment });
-    router.push("/approvals");
+    try {
+      await approveTask(approvalId, { reviewer_id: "admin", comment });
+      toast.success("审批已通过");
+      router.push("/approvals");
+    } catch (err) {
+      toast.error("批准失败: " + (err as Error).message);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleReject = async () => {
     if (!comment) {
-      alert("驳回必须填写理由");
+      toast.warning("驳回必须填写理由");
       return;
     }
     setProcessing(true);
-    await rejectTask(approvalId, { reviewer_id: "admin", comment });
-    router.push("/approvals");
+    try {
+      await rejectTask(approvalId, { reviewer_id: "admin", comment });
+      toast.success("审批已驳回");
+      router.push("/approvals");
+    } catch (err) {
+      toast.error("驳回失败: " + (err as Error).message);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   if (loading) return <Spinner label="加载审批详情..." />;

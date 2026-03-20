@@ -1,11 +1,11 @@
 """
 用户管理 API：用户列表、启用/禁用、修改角色、重置密码、删除用户
 """
-import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from loguru import logger
 
 from app.core.database import get_db
 from app.core.security import hash_password
@@ -16,7 +16,6 @@ from app.schemas.auth_schemas import (
     ResetPasswordRequest, MessageResponse,
 )
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["用户管理"])
 
 

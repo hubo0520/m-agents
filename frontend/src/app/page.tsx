@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { toast } from "sonner";
 import type {
   DashboardStats,
   RiskCaseListItem,
@@ -106,9 +107,10 @@ export default function DashboardPage() {
     setAnalyzingId(caseId);
     try {
       await analyzeCase(caseId);
+      toast.success("分析完成");
       await fetchData();
     } catch (err) {
-      alert("分析失败: " + (err as Error).message);
+      toast.error("分析失败: " + (err as Error).message);
     } finally {
       setAnalyzingId(null);
     }
