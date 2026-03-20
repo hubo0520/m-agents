@@ -8,8 +8,10 @@ import time
 import traceback
 from dataclasses import dataclass, asdict
 from datetime import datetime
+from app.core.utils import utc_now
 from typing import Callable, Optional
 from sqlalchemy.orm import Session
+from loguru import logger
 
 from app.models.models import (
     RiskCase, Merchant, Recommendation, EvidenceItem,
@@ -69,7 +71,7 @@ def _cleanup_case_data(db: Session, case_id: int):
     db.query(EvidenceItem).filter(EvidenceItem.case_id == case_id).delete(synchronize_session=False)
 
     db.flush()
-    print(f"🗑️ 已清理案件 #{case_id} 的旧分析数据")
+    logger.info("🗑️ 已清理案件旧分析数据 | case_id={}", case_id)
 
 
 # V1/V2 分析步骤定义
@@ -112,7 +114,7 @@ def _persist_progress(db: Session, case_id: int, event: AnalysisProgressEvent):
         case.analysis_progress_json = json.dumps(progress, ensure_ascii=False)
         db.commit()
     except Exception as e:
-        print(f"⚠️ 持久化进度失败（不影响分析）: {e}")
+        logger.warning("⚠️ 持久化进度失败（不影响分析） | case_id={} | error={}", case_id, e)
         try:
             db.rollback()
         except Exception:
@@ -136,7 +138,7 @@ def _emit_progress(
         try:
             on_progress(event)
         except Exception as e:
-            print(f"⚠️ 进度回调失败: {e}")
+            logger.warning("⚠️ 进度回调失败 | step={} | error={}", step, e)
     # 2. 持久化到数据库
     if db and case_id:
         _persist_progress(db, case_id, event)
@@ -176,7 +178,7 @@ def analyze(
     case.status = "ANALYZING"
     case.agent_output_json = None
     case.analysis_progress_json = None  # 清理旧进度
-    case.updated_at = datetime.utcnow()
+    case.updated_at = utc_now()
     db.flush()
 
     try:
@@ -241,7 +243,7 @@ def analyze(
         t0 = time.time()
         is_valid, errors = validate_output(agent_output)
         if not is_valid:
-            print(f"⚠️ 守卫校验发现问题: {errors}")
+            logger.warning("⚠️ 守卫校验发现问题 | case_id={} | errors={}", case_id, errors)
             # 尝试自动修复
             for rec in agent_output["recommendations"]:
                 if rec["action_type"] in ("business_loan", "anomaly_review"):
@@ -260,7 +262,7 @@ def analyze(
         case.risk_level = summary["risk_level"]
         case.risk_score = _compute_risk_score_from_metrics(metrics, predicted_gap)
         case.status = "ANALYZED"
-        case.updated_at = datetime.utcnow()
+        case.updated_at = utc_now()
 
         # 保存推荐到 recommendations 表
         for rec_data in recommendations:
@@ -279,9 +281,9 @@ def analyze(
         try:
             tasks_generated = generate_tasks_for_case(db, case_id)
             if tasks_generated:
-                print(f"✅ 案件 #{case_id} 自动生成 {len(tasks_generated)} 条执行任务")
+                logger.info("✅ 案件自动生成执行任务 | case_id={} | count={}", case_id, len(tasks_generated))
         except Exception as task_err:
-            print(f"⚠️ 任务生成失败（不影响分析结果）: {task_err}")
+            logger.warning("⚠️ 任务生成失败（不影响分析结果） | case_id={} | error={}", case_id, task_err)
 
         elapsed = int((time.time() - t0) * 1000)
         _emit_progress(on_progress, "save_results", "保存分析结果", 7, total_steps, "completed", elapsed, "分析结果已保存", db=db, case_id=case_id)
@@ -294,8 +296,7 @@ def analyze(
 
     except Exception as e:
         # 回退到"结构化指标 + 规则建议"模式
-        print(f"⚠️ Agent 分析失败，回退到规则模式: {e}")
-        traceback.print_exc()
+        logger.error("⚠️ Agent 分析失败，回退到规则模式 | case_id={} | error={}", case_id, e, exc_info=True)
         return _fallback_analysis(db, case, merchant)
 
 
@@ -356,16 +357,16 @@ def _fallback_analysis(db: Session, case: RiskCase, merchant: Merchant) -> dict:
     }
 
     case.agent_output_json = json.dumps(output, ensure_ascii=False)
-    case.updated_at = datetime.utcnow()
+    case.updated_at = utc_now()
     db.flush()
 
     # V2: 回退模式下，高风险案件也触发复核任务生成
     try:
         tasks_generated = generate_tasks_for_case(db, case.id)
         if tasks_generated:
-            print(f"✅ 回退模式: 案件 #{case.id} 生成 {len(tasks_generated)} 条执行任务")
+            logger.info("✅ 回退模式生成执行任务 | case_id={} | count={}", case.id, len(tasks_generated))
     except Exception as task_err:
-        print(f"⚠️ 回退模式任务生成失败: {task_err}")
+        logger.warning("⚠️ 回退模式任务生成失败 | case_id={} | error={}", case.id, task_err)
 
     return output
 
@@ -399,7 +400,7 @@ def analyze_v3(
     case.status = "ANALYZING"
     case.agent_output_json = None
     case.analysis_progress_json = None  # 清理旧进度
-    case.updated_at = datetime.utcnow()
+    case.updated_at = utc_now()
     # ⚠️ 必须 commit 释放 SQLite 写锁，否则 start_workflow 内部创建的
     # 独立 session 会因 "database is locked" 而失败
     db.commit()
@@ -411,7 +412,7 @@ def analyze_v3(
         workflow_run_id = result.get("workflow_run_id")
         status = result.get("status", "")
 
-        print(f"✅ V3 工作流完成: run_id={workflow_run_id}, status={status}")
+        logger.info("✅ V3 工作流完成 | case_id={} | run_id={} | status={}", case_id, workflow_run_id, status)
 
         # 刷新案件数据
         db.expire(case)
@@ -435,9 +436,8 @@ def analyze_v3(
         return result.get("summary", {})
 
     except ImportError:
-        print("⚠️ LangGraph 未安装，回退到 V1/V2 模式")
+        logger.warning("⚠️ LangGraph 未安装，回退到 V1/V2 模式 | case_id={}", case_id)
         return analyze(db, case_id, on_progress=on_progress, on_llm_event=on_llm_event)
     except Exception as e:
-        print(f"⚠️ V3 工作流失败，回退到 V1/V2 模式: {e}")
-        traceback.print_exc()
+        logger.error("⚠️ V3 工作流失败，回退到 V1/V2 模式 | case_id={} | error={}", case_id, e, exc_info=True)
         return analyze(db, case_id, on_progress=on_progress, on_llm_event=on_llm_event)

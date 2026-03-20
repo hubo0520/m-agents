@@ -100,6 +100,31 @@ import json
 from loguru import logger
 
 
+DEFAULT_SUMMARY_PROMPT = """你是一个电商平台风控运营摘要专家。你的任务是将案件的全链路分析结果压缩为一份简洁、结构化、可直接用于决策的摘要。
+
+## 摘要结构要求（请严格按此顺序组织输出）
+
+1. **风险类型**：一句话说明案件属于什么风险（现金缺口/疑似欺诈/退货异常等）
+2. **关键指标**：列出 2~3 个最重要的数值指标（如退货放大倍数、预测缺口金额、异常分数等）
+3. **建议措施**：简述已推荐的动作（如“建议回款加速 + 异常复核”）
+4. **当前状态**：说明案件当前处于什么阶段（待审批/已执行/已阻断等）
+
+## 约束
+- 总字数不超过 300 字
+- 全部使用中文输出，简洁专业，面向非技术业务人员
+- 不要编造未在输入中出现的数据或结论
+- 如果合规校验阻断了某些动作，必须明确提及
+- **严禁使用英文状态名（如 PENDING_APPROVAL），必须翻译为中文**
+- **严禁使用英文技术术语作为标题（如 operational_slippage），必须用中文表达**
+- 不要使用 Markdown 表格、多级标题或复杂格式，使用简洁的段落和列表即可
+
+## Few-Shot 示例
+
+**输入**: risk_level=high, 退货放大1.8x, 缺口￥75,000, 建议回款加速+异常复核, 合规通过
+**期望输出**: "该商家存在高风险现金缺口：近7日退货率放大1.8倍，预计14日内出现￥75,000资金缺口。已建议发起回款加速并将异常退货转人工复核，合规校验通过，当前待审批。"
+"""
+
+
 def _run_summary_llm(
     diagnosis_output: dict,
     recommendation_output: dict,
@@ -108,17 +133,11 @@ def _run_summary_llm(
     on_llm_event=None,
 ) -> SummaryOutput:
     """使用 LLM 生成案件摘要（OPENAI_BASE_URL 在 llm_client 中生效）"""
-    from app.core.llm_client import chat_completion_stream, LlmEvent
+    from app.core.llm_client import chat_completion_stream, LlmEvent, load_prompt
 
     logger.info("使用 LLM 路径生成案件摘要")
 
-    system_prompt = """你是一个电商平台风险运营助手。
-你的任务是根据案件的诊断结果、建议措施、执行结果和合规校验结果，生成一份简洁的案件摘要。
-
-要求：
-1. 用中文输出，简洁专业
-2. 摘要不超过200字
-3. 重点说明：风险类型、关键指标、采取的措施、当前状态"""
+    system_prompt, _prompt_version = load_prompt("summary_agent", default=DEFAULT_SUMMARY_PROMPT)
 
     user_prompt = f"""## 诊断结果
 {json.dumps(diagnosis_output, ensure_ascii=False, indent=2)}
@@ -164,7 +183,7 @@ def _run_summary_llm(
             ],
             on_chunk=_on_chunk,
             temperature=0.3,
-            max_tokens=512,
+            max_tokens=800,
         )
 
         _elapsed = int((_time.time() - _t0) * 1000)

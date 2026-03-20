@@ -3,6 +3,7 @@
 """
 import json
 from datetime import datetime, timedelta, date
+from app.core.utils import utc_now
 
 import pytest
 from sqlalchemy.orm import Session
@@ -34,7 +35,7 @@ class TestMetrics:
 
     def test_return_rate_no_returns(self, db_session, mock_merchant):
         """有订单但无退货时退货率应为 0"""
-        now = datetime.utcnow()
+        now = utc_now()
         for i in range(5):
             order = Order(
                 merchant_id=mock_merchant.id,
@@ -50,7 +51,7 @@ class TestMetrics:
 
     def test_return_rate_with_returns(self, db_session, mock_merchant):
         """有退货时应计算正确的退货率"""
-        now = datetime.utcnow()
+        now = utc_now()
         # 创建 4 个订单，其中 2 个有退货
         for i in range(4):
             order = Order(
@@ -115,7 +116,7 @@ class TestMetrics:
 
     def test_refund_pressure(self, db_session, mock_merchant):
         """退款压力应正确计算总退款金额"""
-        now = datetime.utcnow()
+        now = utc_now()
         for i in range(3):
             order = Order(
                 merchant_id=mock_merchant.id,

@@ -12,7 +12,9 @@ import time
 import functools
 import traceback
 from datetime import datetime
+from app.core.utils import utc_now
 from typing import Callable, Any
+from loguru import logger
 
 from app.workflow.state import GraphState, WorkflowStatus
 from app.core.database import SessionLocal
@@ -42,10 +44,10 @@ def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0):
                     last_exception = e
                     if attempt < max_retries:
                         delay = base_delay * (2 ** attempt)
-                        print(f"⚠️ {func.__name__} 第 {attempt + 1} 次失败，{delay}s 后重试: {e}")
+                        logger.warning("⚠️ {} 第 {} 次失败，{}s 后重试 | error={}", func.__name__, attempt + 1, delay, e)
                         time.sleep(delay)
                     else:
-                        print(f"❌ {func.__name__} {max_retries} 次重试全部失败: {e}")
+                        logger.error("❌ {} {} 次重试全部失败 | error={}", func.__name__, max_retries, e)
             raise last_exception
         return wrapper
     return decorator
@@ -69,7 +71,7 @@ def retry_node(max_retries: int = 3, base_delay: float = 1.0):
                     if result.get("error_message") and attempt < max_retries:
                         last_error = result["error_message"]
                         delay = base_delay * (2 ** attempt)
-                        print(f"⚠️ 节点 {node_fn.__name__} 返回错误，{delay}s 后重试: {last_error}")
+                        logger.warning("⚠️ 节点返回错误，重试中 | node={} | delay={}s | error={}", node_fn.__name__, delay, last_error)
                         time.sleep(delay)
                         continue
                     return result
@@ -77,10 +79,10 @@ def retry_node(max_retries: int = 3, base_delay: float = 1.0):
                     last_error = str(e)
                     if attempt < max_retries:
                         delay = base_delay * (2 ** attempt)
-                        print(f"⚠️ 节点 {node_fn.__name__} 第 {attempt + 1} 次异常，{delay}s 后重试: {e}")
+                        logger.warning("⚠️ 节点异常，重试中 | node={} | attempt={} | delay={}s | error={}", node_fn.__name__, attempt + 1, delay, e)
                         time.sleep(delay)
                     else:
-                        print(f"❌ 节点 {node_fn.__name__} {max_retries} 次重试全部失败")
+                        logger.error("❌ 节点重试全部失败 | node={} | retries={}", node_fn.__name__, max_retries)
 
             # 所有重试失败，返回错误状态
             return {
@@ -106,7 +108,7 @@ def fallback_to_rules(state: GraphState, failed_node: str) -> dict:
     Returns:
         降级后的输出
     """
-    print(f"🔄 节点 {failed_node} 降级到规则引擎模式")
+    logger.info("🔄 节点降级到规则引擎模式 | node={}", failed_node)
 
     db = SessionLocal()
     try:
@@ -142,7 +144,7 @@ def fallback_to_rules(state: GraphState, failed_node: str) -> dict:
             return {"error_message": f"节点 {failed_node} 无规则降级路径"}
 
     except Exception as e:
-        print(f"❌ 规则引擎降级也失败: {e}")
+        logger.error("❌ 规则引擎降级也失败 | node={} | error={}", failed_node, e)
         return {"error_message": f"规则降级失败: {str(e)}"}
     finally:
         db.close()
@@ -192,11 +194,11 @@ def create_manual_handoff(state: GraphState, failed_node: str, error_msg: str) -
             run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
             if run:
                 run.status = WorkflowStatus.PAUSED.value
-                run.paused_at = datetime.utcnow()
+                run.paused_at = utc_now()
                 run.current_node = failed_node
 
         db.commit()
-        print(f"🤚 已创建人工接管任务，workflow #{workflow_run_id} 进入 PAUSED")
+        logger.info("🤚 已创建人工接管任务 | workflow_run_id={} | status=PAUSED", workflow_run_id)
 
         return {
             "current_status": WorkflowStatus.PAUSED.value,
@@ -242,7 +244,7 @@ def execute_with_fallback(
             last_error = result["error_message"]
             if attempt < max_retries:
                 delay = 1.0 * (2 ** attempt)
-                print(f"⚠️ L1: 节点 {node_name} 重试 {attempt + 1}/{max_retries}: {last_error}")
+                logger.warning("⚠️ L1: 节点重试 | node={} | attempt={}/{} | error={}", node_name, attempt + 1, max_retries, last_error)
                 time.sleep(delay)
         except Exception as e:
             last_error = str(e)
@@ -252,11 +254,11 @@ def execute_with_fallback(
 
     # L2: 规则引擎降级
     if has_rule_fallback:
-        print(f"🔄 L2: 节点 {node_name} 降级到规则引擎")
+        logger.info("🔄 L2: 节点降级到规则引擎 | node={}", node_name)
         fallback_result = fallback_to_rules(state, node_name)
         if not fallback_result.get("error_message"):
             return fallback_result
 
     # L3: 人工接管
-    print(f"🤚 L3: 节点 {node_name} 转人工接管")
+    logger.info("🤚 L3: 节点转人工接管 | node={}", node_name)
     return create_manual_handoff(state, node_name, last_error)

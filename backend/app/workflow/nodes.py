@@ -8,9 +8,10 @@ import json
 import time
 import traceback
 from datetime import datetime
+from app.core.utils import utc_now
 from loguru import logger
 
-from app.workflow.state import GraphState, WorkflowStatus
+from app.workflow.state import GraphState, WorkflowStatus, append_analysis_context
 from app.core.database import SessionLocal
 from app.models.models import (
     RiskCase, Merchant, WorkflowRun, AgentRun, ApprovalTask, AuditLog,
@@ -43,13 +44,13 @@ def _get_model_name() -> str:
     return "rule-based"
 
 
-def _record_agent_run(db, workflow_run_id: int, agent_name: str, input_data: dict, output_data: dict, status: str, latency_ms: int):
+def _record_agent_run(db, workflow_run_id: int, agent_name: str, input_data: dict, output_data: dict, status: str, latency_ms: int, prompt_version: str = "1"):
     """记录 Agent 运行日志"""
     agent_run = AgentRun(
         workflow_run_id=workflow_run_id,
         agent_name=agent_name,
         model_name=_get_model_name(),
-        prompt_version="1",
+        prompt_version=prompt_version,
         schema_version="1",
         input_json=json.dumps(input_data, ensure_ascii=False, default=str),
         output_json=json.dumps(output_data, ensure_ascii=False, default=str),
@@ -67,7 +68,7 @@ def _update_workflow_run(db, workflow_run_id: int, status: str, current_node: st
     if run:
         run.status = status
         run.current_node = current_node
-        run.updated_at = datetime.utcnow()
+        run.updated_at = utc_now()
         db.flush()
 
 
@@ -96,7 +97,7 @@ def load_case_context(state: GraphState) -> dict:
         ).first() is not None
 
         # 计算经营天数
-        operation_days = (datetime.utcnow() - merchant.created_at).days if merchant.created_at else 0
+        operation_days = (utc_now() - merchant.created_at).days if merchant.created_at else 0
 
         context = {
             "case_id": case.id,
@@ -124,7 +125,7 @@ def load_case_context(state: GraphState) -> dict:
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 load_case_context 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 load_case_context 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -146,7 +147,7 @@ def triage_case(state: GraphState) -> dict:
             merchant_id=f"M-{state['merchant_id']}",
         )
 
-        triage_result = run_triage(agent_input, metrics, context)
+        triage_result = run_triage(agent_input, metrics, context, on_llm_event=state.get("_on_llm_event"))
         output = triage_result.model_dump()
 
         if workflow_run_id:
@@ -155,13 +156,19 @@ def triage_case(state: GraphState) -> dict:
             _record_agent_run(db, workflow_run_id, "triage_agent", {"context": context}, output, "SUCCESS", latency)
 
         db.commit()
+
+        # 追加分诊结论到 analysis_context
+        triage_insight = f"case_type={output.get('case_type','')}, priority={output.get('priority','')}, reasoning={output.get('reasoning','')}"
+        new_context = append_analysis_context(state, "triage", triage_insight)
+
         return {
             "triage_output": output,
             "current_status": WorkflowStatus.TRIAGED.value,
+            "analysis_context": new_context,
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 triage_case 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 triage_case 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -191,7 +198,7 @@ def compute_metrics(state: GraphState) -> dict:
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 compute_metrics 失败 | merchant_id=%s", state.get("merchant_id"))
+        logger.exception("❌ 节点 compute_metrics 失败 | merchant_id={}", state.get("merchant_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -235,7 +242,7 @@ def forecast_gap(state: GraphState) -> dict:
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 forecast_gap 失败 | merchant_id=%s", state.get("merchant_id"))
+        logger.exception("❌ 节点 forecast_gap 失败 | merchant_id={}", state.get("merchant_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -267,9 +274,10 @@ def diagnose_case(state: GraphState) -> dict:
                 "summary": bundle.get("summary", ""),
             })
 
-        # 从 state 中提取 on_llm_event 回调
+        # 从 state 中提取 on_llm_event 回调和 analysis_context
         on_llm_event = state.get("_on_llm_event")
-        diagnosis = run_diagnosis(agent_input, metrics, evidence_list, on_llm_event=on_llm_event)
+        analysis_context = state.get("analysis_context", "")
+        diagnosis = run_diagnosis(agent_input, metrics, evidence_list, on_llm_event=on_llm_event, analysis_context=analysis_context)
         output = diagnosis.model_dump()
 
         if workflow_run_id:
@@ -278,13 +286,21 @@ def diagnose_case(state: GraphState) -> dict:
             _record_agent_run(db, workflow_run_id, "diagnosis_agent", {"case_id": case_id}, output, "SUCCESS", latency)
 
         db.commit()
+
+        # 追加诊断根因摘要到 analysis_context
+        root_causes = output.get('root_causes', [])
+        rc_labels = ', '.join(rc.get('label', '') for rc in root_causes[:3])
+        diagnosis_insight = f"risk_level={output.get('risk_level','')}, root_causes=[{rc_labels}], summary={output.get('business_summary','')[:80]}"
+        new_context = append_analysis_context(state, "diagnosis", diagnosis_insight)
+
         return {
             "diagnosis_output": output,
             "current_status": WorkflowStatus.ANALYZING.value,
+            "analysis_context": new_context,
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 diagnose_case 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 diagnose_case 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -309,7 +325,7 @@ def collect_evidence(state: GraphState) -> dict:
             merchant_id=f"M-{state['merchant_id']}",
         )
 
-        evidence = run_evidence(agent_input, db, case)
+        evidence = run_evidence(agent_input, db, case, on_llm_event=state.get("_on_llm_event"), analysis_context=state.get("analysis_context", ""))
         output = evidence.model_dump()
 
         if workflow_run_id:
@@ -318,12 +334,18 @@ def collect_evidence(state: GraphState) -> dict:
             _record_agent_run(db, workflow_run_id, "evidence_agent", {"case_id": case_id}, output, "SUCCESS", latency)
 
         db.commit()
+
+        # 追加证据覆盖摘要到 analysis_context
+        evidence_insight = f"共收集{output.get('total_evidence_count', 0)}条证据, {output.get('coverage_summary', '')}"
+        new_context = append_analysis_context(state, "evidence", evidence_insight)
+
         return {
             "evidence_output": output,
+            "analysis_context": new_context,
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 collect_evidence 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 collect_evidence 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -360,7 +382,8 @@ def generate_recommendations(state: GraphState) -> dict:
 
         from app.agents.recommend_agent import run_recommendations
         on_llm_event = state.get("_on_llm_event")
-        rec_output = run_recommendations(agent_input, db, merchant, metrics, predicted_gap, evidence_list, on_llm_event=on_llm_event)
+        analysis_context = state.get("analysis_context", "")
+        rec_output = run_recommendations(agent_input, db, merchant, metrics, predicted_gap, evidence_list, on_llm_event=on_llm_event, analysis_context=analysis_context)
         output = rec_output.model_dump()
 
         if workflow_run_id:
@@ -369,13 +392,21 @@ def generate_recommendations(state: GraphState) -> dict:
             _record_agent_run(db, workflow_run_id, "recommendation_agent", {"case_id": case_id}, output, "SUCCESS", latency)
 
         db.commit()
+
+        # 追加建议摘要到 analysis_context
+        recs = output.get('recommendations', [])
+        rec_summary = ', '.join(r.get('title', '') for r in recs[:3])
+        rec_insight = f"risk_level={output.get('risk_level','')}, 建议: {rec_summary}"
+        new_context = append_analysis_context(state, "recommendation", rec_insight)
+
         return {
             "recommendation_output": output,
             "current_status": WorkflowStatus.RECOMMENDING.value,
+            "analysis_context": new_context,
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 generate_recommendations 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 generate_recommendations 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -450,7 +481,7 @@ def create_approval_tasks(state: GraphState) -> dict:
             case.agent_output_json = json.dumps(agent_output, ensure_ascii=False, default=str)
             case.risk_level = diagnosis_output.get("risk_level", case.risk_level)
             case.status = "PENDING_APPROVAL"
-            case.updated_at = datetime.utcnow()
+            case.updated_at = utc_now()
             db.flush()
 
         # ──── 2. 持久化 Recommendation 记录 ────
@@ -516,7 +547,7 @@ def create_approval_tasks(state: GraphState) -> dict:
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 create_approval_tasks 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 create_approval_tasks 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -534,7 +565,7 @@ def wait_for_approval(state: GraphState) -> dict:
             if run:
                 run.status = WorkflowStatus.PAUSED.value
                 run.current_node = "wait_for_approval"
-                run.paused_at = datetime.utcnow()
+                run.paused_at = utc_now()
                 db.commit()
 
         # 检查审批结果（恢复时已有结果）
@@ -597,7 +628,7 @@ def execute_actions(state: GraphState) -> dict:
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 execute_actions 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 execute_actions 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -647,7 +678,7 @@ def finalize_summary(state: GraphState) -> dict:
             case.risk_level = state.get("diagnosis_output", {}).get("risk_level", case.risk_level)
             # 注意：不设置 case.status = "COMPLETED"，因为后续还有 create_approval_tasks 和 write_audit_log
             case.status = "ANALYZED"
-            case.updated_at = datetime.utcnow()
+            case.updated_at = utc_now()
 
         if workflow_run_id:
             _update_workflow_run(db, workflow_run_id, WorkflowStatus.ANALYZING.value, "finalize_summary")
@@ -655,13 +686,28 @@ def finalize_summary(state: GraphState) -> dict:
             _record_agent_run(db, workflow_run_id, "summary_agent", {}, output, "SUCCESS", latency)
 
         db.commit()
+
+        # 向量索引：将案件分析数据写入 ChromaDB（异步，不阻塞主流程）
+        try:
+            from app.core.vector_store import index_case_data, is_vector_store_available
+            if is_vector_store_available():
+                success = index_case_data(case_id)
+                if success:
+                    logger.info("✅ 向量索引写入成功 | case_id={}", case_id)
+                else:
+                    logger.warning("⚠️ 向量索引写入返回 False（数据可能为空）| case_id={}", case_id)
+            else:
+                logger.info("⚠️ 向量存储不可用，跳过索引 | case_id={}", case_id)
+        except Exception as e:
+            logger.warning("向量索引失败（不影响主流程）| case_id={}: {}", case_id, e)
+
         return {
             "summary_output": output,
             "current_status": WorkflowStatus.COMPLETED.value,
         }
     except Exception as e:
         db.rollback()
-        logger.exception("❌ 节点 finalize_summary 失败 | case_id=%s", state.get("case_id"))
+        logger.exception("❌ 节点 finalize_summary 失败 | case_id={}", state.get("case_id"))
         return {"error_message": str(e), "current_status": WorkflowStatus.FAILED_RETRYABLE.value}
     finally:
         db.close()
@@ -695,7 +741,7 @@ def write_audit_log(state: GraphState) -> dict:
         if workflow_run_id:
             run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
             if run:
-                run.ended_at = datetime.utcnow()
+                run.ended_at = utc_now()
                 run.status = current_status
 
         db.commit()

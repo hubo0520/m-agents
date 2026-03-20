@@ -5,6 +5,7 @@
 """
 import json
 from datetime import datetime, timedelta, date
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -49,7 +50,7 @@ def check_financing_eligibility(db: Session, merchant_id: int, predicted_gap: fl
         return {"eligible": False, "rejection_reasons": ["无可用融资产品"], "recommended_amount": 0}
 
     # 计算商家指标
-    cutoff_90d = datetime.utcnow() - timedelta(days=90)
+    cutoff_90d = utc_now() - timedelta(days=90)
     total_sales_90d = (
         db.query(func.sum(Order.order_amount))
         .filter(Order.merchant_id == merchant_id, Order.order_time >= cutoff_90d)
@@ -106,7 +107,7 @@ def check_financing_eligibility(db: Session, merchant_id: int, predicted_gap: fl
                 recommended = min(predicted_gap, product.max_amount)
             else:
                 # 计算近14天退货退款总额作为资金需求参考
-                cutoff_14d = datetime.utcnow() - timedelta(days=14)
+                cutoff_14d = utc_now() - timedelta(days=14)
                 refund_total = (
                     db.query(func.sum(Return.refund_amount))
                     .join(Order, Return.order_id == Order.id)
@@ -173,7 +174,7 @@ def check_claim_eligibility(db: Session, merchant_id: int, case_id: int) -> dict
         }
 
     # 计算近 14 天退货总金额
-    cutoff_14d = datetime.utcnow() - timedelta(days=14)
+    cutoff_14d = utc_now() - timedelta(days=14)
     return_total = (
         db.query(func.sum(Return.refund_amount))
         .join(Order, Return.order_id == Order.id)

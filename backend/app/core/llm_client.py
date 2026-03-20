@@ -5,6 +5,7 @@ LLM 客户端 — 统一封装 OpenAI 调用
 """
 from dataclasses import dataclass, asdict
 from typing import Callable, Optional, Type, TypeVar
+import time
 
 from pydantic import BaseModel
 from loguru import logger
@@ -22,10 +23,12 @@ def _get_client():
     global _client
     if _client is None:
         try:
+            import httpx
             from openai import OpenAI
             _client = OpenAI(
                 api_key=settings.OPENAI_API_KEY,
-                base_url=settings.OPENAI_BASE_URL,  # ← 这里实际使用了 OPENAI_BASE_URL
+                base_url=settings.OPENAI_BASE_URL,
+                timeout=httpx.Timeout(60.0, connect=10.0),  # 读取 60s / 连接 10s
             )
             logger.info(
                 "OpenAI 客户端初始化成功 | base_url=%s | model=%s",
@@ -60,13 +63,16 @@ def chat_completion(
         LLM 回复文本
     """
     client = _get_client()
+    t0 = time.time()
     response = client.chat.completions.create(
         model=model or settings.OPENAI_MODEL,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
     )
+    elapsed_ms = int((time.time() - t0) * 1000)
     content = response.choices[0].message.content
+    logger.info("LLM 调用完成 | model={} | elapsed_ms={}", model or settings.OPENAI_MODEL, elapsed_ms)
     return content if content is not None else ""
 
 
@@ -176,6 +182,21 @@ def structured_output(
 def is_llm_enabled() -> bool:
     """检查 LLM 是否启用"""
     return settings.USE_LLM and bool(settings.OPENAI_API_KEY)
+
+
+def load_prompt(agent_name: str, default: str = "") -> tuple[str, str]:
+    """
+    加载指定 Agent 的 Prompt 版本（从 DB 或 fallback 到默认值）。
+
+    Args:
+        agent_name: Agent 名称，如 "diagnosis_agent"
+        default: 默认 Prompt 内容
+
+    Returns:
+        (prompt_content, version_str) 元组
+    """
+    from app.core.prompt_loader import PromptLoader
+    return PromptLoader.load(agent_name, default)
 
 
 # ═══════════════════════════════════════════════════════════════

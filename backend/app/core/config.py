@@ -1,12 +1,13 @@
 """全局配置"""
 from pydantic_settings import BaseSettings
+from pydantic import model_validator, ConfigDict
 from typing import List
 import os
 
 
 class Settings(BaseSettings):
-    # 数据库
-    DATABASE_URL: str = f"sqlite:///{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data.db')}"
+    # 数据库（默认 MySQL）
+    DATABASE_URL: str = "mysql+pymysql://root:Hjb0520+-@localhost:3306/m_agents"
 
     # CORS
     CORS_ORIGINS: List[str] = [
@@ -49,9 +50,23 @@ class Settings(BaseSettings):
     # 经营贷资格
     MIN_OPERATION_DAYS: int = 60
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # 向量存储（RAG 对话系统）
+    VECTOR_STORE_DIR: str = ""  # 空字符串使用默认路径 backend/vector_data/
+    EMBEDDING_MODEL: str = "text-embedding-v4"  # 阿里云通义嵌入模型
+    EMBEDDING_BATCH_SIZE: int = 6               # 嵌入请求批量大小（text-embedding-v4 限制较严，建议 ≤6）
+    RAG_TOP_K: int = 5                          # 语义检索返回的最相关文档数
+
+    @model_validator(mode="after")
+    def _validate_security(self) -> "Settings":
+        """安全校验：非调试模式下 JWT 密钥必须有效"""
+        if not self.DEBUG_AUTH and len(self.JWT_SECRET_KEY) < 32:
+            raise ValueError(
+                "JWT_SECRET_KEY 必须至少 32 个字符（当前长度 %d）。"
+                "如需跳过校验，请设置 DEBUG_AUTH=True" % len(self.JWT_SECRET_KEY)
+            )
+        return self
+
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 settings = Settings()

@@ -5,6 +5,7 @@
 """
 import json
 from datetime import datetime, date
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 
 from app.models.models import Merchant, RiskCase
@@ -156,7 +157,7 @@ def generate_risk_cases(db: Session) -> list:
             existing.risk_score = result["risk_score"]
             existing.risk_level = result["risk_level"]
             existing.trigger_json = trigger_json
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = utc_now()
             cases_created.append(existing)
         else:
             # 新建案件

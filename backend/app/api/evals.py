@@ -9,6 +9,7 @@ import random
 import traceback
 import threading
 from datetime import datetime
+from app.core.utils import utc_now
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -391,7 +392,7 @@ def _run_eval_background(eval_run_id: int, dataset_id: int, reuse_existing: bool
         eval_run.avg_judge_score = sum(judge_scores) / len(judge_scores) if judge_scores else None
         eval_run.avg_latency_ms = int(sum(latencies) / len(latencies)) if latencies else None
         eval_run.status = "COMPLETED"
-        eval_run.ended_at = datetime.utcnow()
+        eval_run.ended_at = utc_now()
         db.commit()
 
         logger.info("评测运行 #%d 完成 | %d/%d 用例 | avg_judge=%.1f",
@@ -404,7 +405,7 @@ def _run_eval_background(eval_run_id: int, dataset_id: int, reuse_existing: bool
             eval_run = db.query(EvalRun).filter(EvalRun.id == eval_run_id).first()
             if eval_run:
                 eval_run.status = "FAILED"
-                eval_run.ended_at = datetime.utcnow()
+                eval_run.ended_at = utc_now()
                 db.commit()
         except Exception:
             pass

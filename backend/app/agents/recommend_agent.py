@@ -4,6 +4,7 @@
 根据案件指标生成动作建议。
 """
 from datetime import datetime, timedelta
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -43,7 +44,7 @@ def generate_recommendations(
         ))
 
     # 2. 经营贷建议 — 需要资格检查
-    operation_days = (datetime.utcnow() - merchant.created_at).days if merchant.created_at else 0
+    operation_days = (utc_now() - merchant.created_at).days if merchant.created_at else 0
     anomaly = metrics.get("anomaly_score", 0)
 
     can_loan = (
@@ -111,6 +112,7 @@ def run_recommendations(
     predicted_gap: float,
     evidence: list,
     on_llm_event=None,
+    analysis_context: str = "",
 ) -> RecommendationOutput:
     """V3 适配器：将现有推荐逻辑包装为 RecommendationOutput，支持 LLM / 规则引擎双路径"""
     from app.core.llm_client import is_llm_enabled
@@ -118,7 +120,7 @@ def run_recommendations(
     if is_llm_enabled():
         return _run_recommendations_llm(
             agent_input, db, merchant, metrics, predicted_gap, evidence,
-            on_llm_event=on_llm_event,
+            on_llm_event=on_llm_event, analysis_context=analysis_context,
         )
 
     # ── 规则引擎路径（原有逻辑） ──
@@ -163,6 +165,50 @@ import json
 from loguru import logger
 
 
+DEFAULT_RECOMMENDATION_PROMPT = """你是一个电商平台资深风险运营策略专家 Agent。你的任务是根据商家画像、经营指标、现金流预测和证据，生成精准可执行的保障动作建议。
+
+## 推理框架（请按以下步骤逐步思考）
+
+**第 1 步 — 评估风险等级**：基于指标综合判断 risk_level (high/medium/low)。
+- high: anomaly_score ≥ 0.7 或 predicted_gap ≥ 100000
+- medium: return_amplification ≥ 1.3 或 avg_settlement_delay ≥ 2
+- low: 其他
+
+**第 2 步 — 匹配可用动作**：逐一评估以下动作类型的适用条件：
+- **advance_settlement** (回款加速): 适用条件 = avg_settlement_delay ≥ 2 或 (predicted_gap > 0 且 delay ≥ 1)。预期效果：缩短回款周期 T+1~T+3 到账。
+- **business_loan** (经营贷): 适用条件 = 经营天数 ≥ 60 且 store_level 为 gold/silver 且 anomaly_score < 0.5 且 (predicted_gap ≥ 5000 或 refund_pressure_7d ≥ 10000)。⚠️ 必须设置 requires_manual_review=true。
+- **insurance_adjust** (运费险调整): 适用条件 = return_amplification ≥ 1.3 且 return_rate_7d ≥ 0.15。
+- **anomaly_review** (异常退货人工复核): 适用条件 = anomaly_score ≥ 0.3。⚠️ 必须设置 requires_manual_review=true。
+
+**第 3 步 — 构建建议**：为每个满足条件的动作生成建议，why 字段必须引用具体数值，confidence 基于证据充分度。
+
+**第 4 步 — 绑定证据**：每条建议的 evidence_ids 必须引用至少 1 个实际存在的 evidence_id。
+
+## Few-Shot 示例
+
+**输入**: predicted_gap=75000, avg_settlement_delay=3.2, anomaly_score=0.35, 证据=[EV-101(退货), EV-103(回款延迟)]
+
+**期望输出**:
+```json
+{
+  "risk_level": "medium",
+  "recommendations": [
+    {"action_type": "advance_settlement", "title": "建议优先发起回款加速", "why": "回款延迟3.2天，预计缺口¥75,000", "confidence": 0.85, "requires_manual_review": true, "evidence_ids": ["EV-103"]},
+    {"action_type": "anomaly_review", "title": "建议将疑似异常退货转人工复核", "why": "异常退货分数0.35，存在退货模式异常", "confidence": 0.35, "requires_manual_review": true, "evidence_ids": ["EV-101"]}
+  ]
+}
+```
+
+## 安全约束（严格遵守）
+- ❌ 不要推荐未在上述 4 种 action_type 中的动作类型
+- ❌ 融资类 (business_loan) 和反欺诈类 (anomaly_review) 必须设置 requires_manual_review=true
+- ❌ 不要编造不存在的 evidence_id
+- ❌ expected_benefit 中不要使用"保证"、"100%"等绝对化表述
+- ❌ confidence 不要高于 0.95
+
+请严格按照输出 Schema 返回结构化 JSON。"""
+
+
 def _run_recommendations_llm(
     agent_input: AgentInput,
     db: Session,
@@ -171,9 +217,10 @@ def _run_recommendations_llm(
     predicted_gap: float,
     evidence: list,
     on_llm_event=None,
+    analysis_context: str = "",
 ) -> RecommendationOutput:
     """使用 LLM 生成动作建议（OPENAI_BASE_URL 在 llm_client 中生效）"""
-    from app.core.llm_client import structured_output, LlmEvent
+    from app.core.llm_client import structured_output, LlmEvent, load_prompt
 
     logger.info("案件 %s 使用 LLM 路径生成动作建议", agent_input.case_id)
 
@@ -183,29 +230,12 @@ def _run_recommendations_llm(
         "store_name": getattr(merchant, "store_name", "未知"),
         "store_level": getattr(merchant, "store_level", "未知"),
         "operation_days": (
-            (__import__("datetime").datetime.utcnow() - merchant.created_at).days
+            (utc_now() - merchant.created_at).days
             if merchant.created_at else 0
         ),
     }
 
-    system_prompt = """你是一个电商平台风险运营建议 Agent。
-你的任务是根据商家画像、经营指标、现金流预测和证据，生成精准的保障动作建议。
-
-可用的动作类型 (action_type):
-- advance_settlement: 回款加速 — 缩短回款周期缓解短期流动性
-- business_loan: 经营贷 — 通过融资补充中期现金流
-- insurance_adjust: 运费险策略调整 — 降低运费险赔付压力
-- anomaly_review: 异常退货人工复核 — 识别疑似欺诈行为
-
-生成建议时请注意：
-1. 每条建议的 why 字段要具体、有数据支撑，不要泛泛而谈
-2. confidence 在 0~1 之间，依据证据充分度和指标严重度
-3. 融资类 (business_loan) 和反欺诈类 (anomaly_review) 必须设置 requires_manual_review=true
-4. 每条建议必须绑定至少 1 个 evidence_id
-5. risk_level 根据整体风险判断：high/medium/low
-6. expected_benefit 中 cash_relief 只在 advance_settlement 和 business_loan 时填写
-
-请严格按照输出 Schema 返回结构化 JSON。"""
+    system_prompt, _prompt_version = load_prompt("recommendation_agent", default=DEFAULT_RECOMMENDATION_PROMPT)
 
     # 提取 evidence_ids 以供 LLM 引用
     evidence_summary = []
@@ -233,6 +263,10 @@ def _run_recommendations_llm(
 {json.dumps(evidence_summary, ensure_ascii=False, indent=2)}
 
 请基于以上信息生成动作建议列表。"""
+
+    # 注入上游分析链路
+    if analysis_context:
+        user_prompt += f"\n\n## 上游分析链路\n{analysis_context}"
 
     try:
         # 发送 llm_input 事件

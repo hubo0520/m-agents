@@ -8,6 +8,7 @@ from sqlalchemy.orm import relationship
 import enum
 
 from app.core.database import Base
+from app.core.utils import utc_now
 
 
 # ─────────────────────── 枚举 ───────────────────────
@@ -122,8 +123,8 @@ class User(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     is_superadmin = Column(Boolean, nullable=False, default=False)
     last_login_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 # ─────────────────────── 1. merchants ───────────────────────
@@ -136,7 +137,7 @@ class Merchant(Base):
     industry = Column(String(64), nullable=False)
     settlement_cycle_days = Column(Integer, nullable=False, default=7)
     store_level = Column(String(16), nullable=False, default="silver")  # gold/silver/bronze
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # 关联
     orders = relationship("Order", back_populates="merchant")
@@ -245,8 +246,8 @@ class RiskCase(Base):
     status = Column(String(32), nullable=False, default="NEW")
     agent_output_json = Column(Text, nullable=True)
     analysis_progress_json = Column(Text, nullable=True)  # 分析进度 JSON，刷新页面后可恢复工作流
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     merchant = relationship("Merchant", back_populates="risk_cases")
     evidence_items = relationship("EvidenceItem", back_populates="risk_case")
@@ -309,7 +310,7 @@ class Review(Base):
     decision = Column(String(32), nullable=False)
     comment = Column(Text, nullable=True)
     final_action_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     risk_case = relationship("RiskCase", back_populates="reviews")
 
@@ -326,7 +327,7 @@ class AuditLog(Base):
     action = Column(String(64), nullable=False)
     old_value = Column(Text, nullable=True)
     new_value = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
 
 # ─────────────────────── 13. financing_applications ───────────────────────
@@ -345,8 +346,8 @@ class FinancingApplication(Base):
     historical_settlement_json = Column(Text, nullable=True)
     approval_status = Column(String(32), nullable=False, default="DRAFT")
     reviewer_comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     risk_case = relationship("RiskCase", back_populates="financing_applications")
 
@@ -372,8 +373,8 @@ class Claim(Base):
     return_details_json = Column(Text, nullable=True)
     claim_status = Column(String(32), nullable=False, default="DRAFT")
     reviewer_comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     risk_case = relationship("RiskCase", back_populates="claims")
 
@@ -399,8 +400,8 @@ class ManualReview(Base):
     status = Column(String(32), nullable=False, default="PENDING")
     review_result = Column(String(64), nullable=True)
     reviewer_comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     completed_at = Column(DateTime, nullable=True)
 
     risk_case = relationship("RiskCase", back_populates="manual_reviews")
@@ -425,8 +426,8 @@ class WorkflowRun(Base):
     graph_version = Column(String(64), nullable=False, default="v3.0")
     status = Column(String(32), nullable=False, default="NEW")
     current_node = Column(String(128), nullable=True)
-    started_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    started_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     paused_at = Column(DateTime, nullable=True)
     resumed_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
@@ -457,7 +458,7 @@ class AgentRun(Base):
     output_json = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, default="RUNNING")
     latency_ms = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     workflow_run = relationship("WorkflowRun", back_populates="agent_runs")
 
@@ -476,7 +477,7 @@ class Checkpoint(Base):
     workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id"), nullable=False)
     node_name = Column(String(128), nullable=False)
     checkpoint_blob = Column(Text, nullable=True)  # JSON 序列化的 checkpoint 数据
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     workflow_run = relationship("WorkflowRun", back_populates="checkpoints")
 
@@ -497,7 +498,7 @@ class ApprovalTask(Base):
     reviewed_at = Column(DateTime, nullable=True)
     comment = Column(Text, nullable=True)
     final_action_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     due_at = Column(DateTime, nullable=True)
 
     workflow_run = relationship("WorkflowRun", back_populates="approval_tasks")
@@ -524,7 +525,7 @@ class ToolInvocation(Base):
     approval_status = Column(String(32), nullable=True)
     status = Column(String(32), nullable=False, default="PENDING")
     idempotency_key = Column(String(256), nullable=True, unique=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     workflow_run = relationship("WorkflowRun", back_populates="tool_invocations")
 
@@ -545,7 +546,7 @@ class PromptVersion(Base):
     content = Column(Text, nullable=False)
     status = Column(String(32), nullable=False, default="DRAFT")
     canary_weight = Column(Float, nullable=True, default=0.0)  # 灰度权重 0.0~1.0
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     __table_args__ = (
         Index("ix_prompt_versions_agent_name", "agent_name"),
@@ -561,7 +562,7 @@ class SchemaVersion(Base):
     agent_name = Column(String(64), nullable=False)
     version = Column(String(16), nullable=False)
     json_schema = Column(Text, nullable=False)  # JSON Schema 内容
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     __table_args__ = (
         Index("ix_schema_versions_agent_name", "agent_name"),
@@ -577,7 +578,7 @@ class EvalDataset(Base):
     name = Column(String(128), nullable=False)
     description = Column(Text, nullable=True)
     test_cases_json = Column(Text, nullable=False)  # JSON 数组
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
 
 # ─────────────────────── 24. eval_runs ───────────────────────
@@ -601,7 +602,7 @@ class EvalRun(Base):
     total_count = Column(Integer, nullable=True, default=0)
     avg_judge_score = Column(Float, nullable=True)
     avg_latency_ms = Column(Integer, nullable=True)
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=utc_now)
     ended_at = Column(DateTime, nullable=True)
 
 
@@ -627,7 +628,7 @@ class EvalResult(Base):
     latency_ms = Column(Integer, nullable=True)  # 工作流执行耗时(毫秒)
     risk_level_match = Column(Integer, nullable=True)  # 风险等级匹配 0/1
     root_cause_match = Column(Integer, nullable=True)  # 根因覆盖 0/1
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -642,8 +643,8 @@ class Conversation(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     case_id = Column(Integer, ForeignKey("risk_cases.id"), nullable=False)
     title = Column(String(256), nullable=False, default="新对话")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     risk_case = relationship("RiskCase", back_populates="conversations")
     messages = relationship("ConversationMessage", back_populates="conversation", order_by="ConversationMessage.created_at")
@@ -662,7 +663,7 @@ class ConversationMessage(Base):
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     role = Column(String(16), nullable=False)  # "user" | "assistant"
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     conversation = relationship("Conversation", back_populates="messages")
 

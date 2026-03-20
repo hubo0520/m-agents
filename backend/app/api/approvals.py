@@ -6,6 +6,8 @@
 """
 import json
 from datetime import datetime
+from app.core.utils import utc_now
+from loguru import logger
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -41,7 +43,7 @@ def list_approvals(
     items = query.order_by(ApprovalTask.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     # 检查 SLA 超时
-    now = datetime.utcnow()
+    now = utc_now()
     result_items = []
     for item in items:
         data = {
@@ -109,7 +111,7 @@ def approve_task(approval_id: int, req: ApproveRequest, db: Session = Depends(ge
 
     task.status = "APPROVED"
     task.reviewer = req.reviewer_id
-    task.reviewed_at = datetime.utcnow()
+    task.reviewed_at = utc_now()
     task.comment = req.comment
 
     # 写入审计日志
@@ -135,7 +137,7 @@ def reject_task(approval_id: int, req: RejectRequest, db: Session = Depends(get_
 
     task.status = "REJECTED"
     task.reviewer = req.reviewer_id
-    task.reviewed_at = datetime.utcnow()
+    task.reviewed_at = utc_now()
     task.comment = req.comment
 
     _log_audit(db, "approval_task", task.id, req.reviewer_id, "reject", "PENDING", "REJECTED")
@@ -145,7 +147,7 @@ def reject_task(approval_id: int, req: RejectRequest, db: Session = Depends(get_
         run = db.query(WorkflowRun).filter(WorkflowRun.id == task.workflow_run_id).first()
         if run:
             run.status = "REJECTED"
-            run.ended_at = datetime.utcnow()
+            run.ended_at = utc_now()
 
     db.commit()
     return {"status": "ok", "approval_id": approval_id, "new_status": "REJECTED"}
@@ -164,7 +166,7 @@ def revise_and_approve(approval_id: int, req: ReviseAndApproveRequest, db: Sessi
 
     task.status = "APPROVED"
     task.reviewer = req.reviewer_id
-    task.reviewed_at = datetime.utcnow()
+    task.reviewed_at = utc_now()
     task.comment = req.comment
     task.payload_json = json.dumps(req.revised_payload, ensure_ascii=False)
     task.final_action_json = json.dumps(req.revised_payload, ensure_ascii=False)
@@ -198,7 +200,7 @@ def batch_approve(req: BatchApproveRequest, db: Session = Depends(get_db)):
             continue
 
         task.reviewer = req.reviewer_id
-        task.reviewed_at = datetime.utcnow()
+        task.reviewed_at = utc_now()
         task.comment = req.comment
 
         _log_audit(db, "approval_task", task.id, req.reviewer_id, req.action, "PENDING", task.status)
@@ -209,7 +211,7 @@ def batch_approve(req: BatchApproveRequest, db: Session = Depends(get_db)):
             run = db.query(WorkflowRun).filter(WorkflowRun.id == task.workflow_run_id).first()
             if run:
                 run.status = "REJECTED"
-                run.ended_at = datetime.utcnow()
+                run.ended_at = utc_now()
 
         results.append({"approval_id": aid, "status": "ok", "new_status": task.status})
 
@@ -249,7 +251,7 @@ def _try_resume_workflow(db: Session, workflow_run_id: int):
     if pending_tasks == 0:
         # 所有审批完成，触发 workflow resume
         run.status = "RESUMED"
-        run.resumed_at = datetime.utcnow()
+        run.resumed_at = utc_now()
         run.current_node = "execute_actions"
         db.flush()
 
@@ -258,4 +260,4 @@ def _try_resume_workflow(db: Session, workflow_run_id: int):
             from app.workflow.graph import resume_workflow
             resume_workflow(workflow_run_id, {"all_approved": True})
         except Exception as e:
-            print(f"⚠️ Workflow #{workflow_run_id} 恢复失败: {e}")
+            logger.warning("⚠️ Workflow 恢复失败 | workflow_run_id={} | error={}", workflow_run_id, e)

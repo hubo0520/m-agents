@@ -4,6 +4,7 @@
 import os
 import json
 from datetime import datetime, timedelta, date
+from app.core.utils import utc_now
 
 import pytest
 from sqlalchemy import create_engine
@@ -12,7 +13,7 @@ from fastapi.testclient import TestClient
 
 # 在导入 app 之前设置测试环境变量
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-only"
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-only-32ch!"
 os.environ["DEBUG_AUTH"] = "False"
 
 from app.core.database import Base, get_db
@@ -158,7 +159,7 @@ def mock_merchant(db_session) -> Merchant:
 @pytest.fixture
 def mock_merchant_with_orders(db_session, mock_merchant) -> Merchant:
     """创建带有订单和退货数据的商家"""
-    now = datetime.utcnow()
+    now = utc_now()
 
     # 创建近 30 天的订单（每天 2 笔）
     for day_offset in range(30):
@@ -245,7 +246,7 @@ def mock_approval(db_session, mock_case) -> ApprovalTask:
         assignee_role="admin",
         status="PENDING",
         payload_json=json.dumps({"action": "经营贷", "amount": 50000}),
-        due_at=datetime.utcnow() + timedelta(hours=24),
+        due_at=utc_now() + timedelta(hours=24),
     )
     db_session.add(approval)
     db_session.flush()

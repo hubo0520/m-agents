@@ -4,6 +4,7 @@
 所有函数接受 SQLAlchemy Session 和 merchant_id，返回确定性结果。
 """
 from datetime import datetime, timedelta, date
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import Optional
@@ -13,7 +14,7 @@ from app.models.models import Order, Return, Settlement
 
 def compute_return_rate(db: Session, merchant_id: int, days: int = 7) -> float:
     """计算指定商家近 N 天的退货率（退货订单数 / 总订单数）"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utc_now() - timedelta(days=days)
 
     total_orders = (
         db.query(func.count(Order.id))
@@ -76,7 +77,7 @@ def compute_avg_settlement_delay(db: Session, merchant_id: int) -> float:
 
 def compute_refund_pressure(db: Session, merchant_id: int, days: int = 7) -> float:
     """计算指定天数内的退款总金额"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utc_now() - timedelta(days=days)
 
     total = (
         db.query(func.sum(Return.refund_amount))
@@ -95,7 +96,7 @@ def compute_anomaly_score(db: Session, merchant_id: int) -> float:
     2. 签收后极短时间内退款
     3. 退货率突变幅度
     """
-    cutoff = datetime.utcnow() - timedelta(days=14)
+    cutoff = utc_now() - timedelta(days=14)
 
     # 获取近 14 天退货记录
     returns_data = (

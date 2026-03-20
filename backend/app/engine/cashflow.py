@@ -5,6 +5,7 @@
 不做 ML 训练，纯 Python 实现
 """
 from datetime import datetime, timedelta, date
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
@@ -17,7 +18,7 @@ def _get_daily_historical_data(
     db: Session, merchant_id: int, lookback_days: int = 30
 ) -> dict:
     """获取近 N 天的每日 inflow/outflow 历史数据"""
-    cutoff = datetime.utcnow() - timedelta(days=lookback_days)
+    cutoff = utc_now() - timedelta(days=lookback_days)
     today = date.today()
 
     # 每日订单金额 (inflow)

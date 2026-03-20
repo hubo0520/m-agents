@@ -5,6 +5,7 @@ LangGraph 工作流图定义
 """
 import json
 from datetime import datetime
+from app.core.utils import utc_now
 from typing import Literal
 from loguru import logger
 
@@ -513,7 +514,7 @@ def resume_workflow(workflow_run_id: int, approval_results: dict = None) -> dict
 
         # 更新为恢复中
         run.status = WorkflowStatus.RESUMED.value
-        run.resumed_at = datetime.utcnow()
+        run.resumed_at = utc_now()
         run.current_node = "execute_actions"
         db.commit()
 

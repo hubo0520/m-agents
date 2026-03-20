@@ -1,6 +1,7 @@
 """V2: 任务管理 API 路由"""
 import json
 from datetime import datetime
+from app.core.utils import utc_now
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -284,12 +285,12 @@ def update_task_status(
         task.approval_status = req.new_status
         if req.comment:
             task.reviewer_comment = req.comment
-        task.updated_at = datetime.utcnow()
+        task.updated_at = utc_now()
     elif task_type == "claim":
         task.claim_status = req.new_status
         if req.comment:
             task.reviewer_comment = req.comment
-        task.updated_at = datetime.utcnow()
+        task.updated_at = utc_now()
     elif task_type == "manual_review":
         task.status = req.new_status
         if req.comment:
@@ -297,9 +298,9 @@ def update_task_status(
         if req.new_status == "IN_PROGRESS" and task.assigned_to == "unassigned":
             task.assigned_to = req.reviewer_id
         if req.new_status == "COMPLETED":
-            task.completed_at = datetime.utcnow()
+            task.completed_at = utc_now()
             task.review_result = req.comment or "已完成"
-        task.updated_at = datetime.utcnow()
+        task.updated_at = utc_now()
 
     # 审计日志
     write_audit_log(

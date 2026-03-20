@@ -5,6 +5,7 @@
 """
 import json
 from datetime import datetime
+from app.core.utils import utc_now
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -72,7 +73,7 @@ def retry_workflow_api(run_id: int, db: Session = Depends(get_db)):
     try:
         # 标记旧 run 为终止
         run.status = "FAILED_FINAL"
-        run.ended_at = datetime.utcnow()
+        run.ended_at = utc_now()
         db.commit()
 
         # 创建新的 workflow run
@@ -223,7 +224,7 @@ def reopen_case(case_id: int, db: Session = Depends(get_db)):
 
     # 重置案件状态
     case.status = "NEW"
-    case.updated_at = datetime.utcnow()
+    case.updated_at = utc_now()
     db.commit()
 
     # 启动新的 workflow

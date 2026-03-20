@@ -2,6 +2,7 @@
 可观测面板 API — Agent 运行指标统计
 """
 from datetime import datetime, timedelta, date
+from app.core.utils import utc_now
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case as sql_case, cast, Date as SADate
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/api/observability", tags=["可观测面板"])
 
 def _get_cutoff(days: int) -> datetime:
     """获取截止时间"""
-    return datetime.utcnow() - timedelta(days=days)
+    return utc_now() - timedelta(days=days)
 
 
 # ───────────── GET /api/observability/summary ─────────────

@@ -3,6 +3,7 @@
 """
 import json
 from datetime import datetime
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 
 from app.models.models import RiskCase, Review, AuditLog, Recommendation
@@ -52,7 +53,7 @@ def transition_status(db: Session, case: RiskCase, new_status: str, actor: str =
         )
 
     case.status = new_status
-    case.updated_at = datetime.utcnow()
+    case.updated_at = utc_now()
 
     write_audit_log(
         db=db,

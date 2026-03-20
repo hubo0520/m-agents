@@ -151,8 +151,82 @@ def get_messages(
 
 # ───────────── POST /api/conversations/{conversation_id}/chat/stream ─────────────
 
-def _build_case_context(db: Session, case_id: int) -> str:
-    """构建案件上下文作为 system prompt 的一部分"""
+def _build_case_context(db: Session, case_id: int, user_message: str = "") -> str:
+    """
+    构建案件上下文作为 system prompt 的一部分。
+
+    优先使用 ChromaDB 语义检索（RAG 模式），不可用时降级为原有的 agent_output_json 直接注入。
+    """
+    # ── 尝试 RAG 模式（ChromaDB 语义检索） ──
+    if user_message:
+        try:
+            from app.core.vector_store import search_case_context, is_vector_store_available
+            from app.core.config import settings
+
+            vector_available = is_vector_store_available()
+            logger.info(
+                "🔍 RAG 决策 | case_id={} | user_message='{}' | vector_store_available={}",
+                case_id, user_message[:60] + ("..." if len(user_message) > 60 else ""), vector_available,
+            )
+
+            if vector_available:
+                top_k = getattr(settings, "RAG_TOP_K", 5)
+                passages = search_case_context(case_id, user_message, top_k=top_k)
+                if passages:
+                    rag_parts = ["## 语义检索结果（与用户问题最相关的案件信息）"]
+                    for i, p in enumerate(passages, 1):
+                        meta = p.get("metadata", {})
+                        source = meta.get("source", "unknown")
+                        ev_id = meta.get("evidence_id", "")
+                        source_tag = f"[来源: {source}"
+                        if ev_id:
+                            source_tag += f", {ev_id}"
+                        source_tag += "]"
+                        rag_parts.append(f"{i}. {p['document']} {source_tag}")
+
+                    # 补充商家基础信息（RAG 可能不完全覆盖）
+                    merchant_info = _get_merchant_info(db, case_id)
+                    if merchant_info:
+                        rag_parts.append(f"\n{merchant_info}")
+
+                    logger.info(
+                        "📡 对话使用 RAG 模式 | case_id={} | 检索到 {} 条相关片段",
+                        case_id, len(passages),
+                    )
+                    return "\n".join(rag_parts)
+                else:
+                    logger.info(
+                        "📡 RAG 未命中相关片段，降级为直接注入模式 | case_id={}",
+                        case_id,
+                    )
+            else:
+                logger.info(
+                    "📡 向量存储不可用，使用直接注入模式 | case_id={}",
+                    case_id,
+                )
+        except Exception as e:
+            logger.warning("RAG 检索失败，降级为直接注入模式: {}", e)
+    else:
+        logger.debug("RAG 跳过 | case_id={} | 原因: user_message 为空", case_id)
+
+    # ── Fallback: 原有 agent_output_json 直接注入 ──
+    return _build_case_context_legacy(db, case_id)
+
+
+def _get_merchant_info(db: Session, case_id: int) -> str:
+    """获取商家基础信息文本"""
+    case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
+    if case and case.merchant:
+        merchant = case.merchant
+        return (
+            f"## 商家信息\n名称: {merchant.name}\n行业: {merchant.industry}\n"
+            f"店铺等级: {merchant.store_level}\n结算周期: {merchant.settlement_cycle_days}天"
+        )
+    return ""
+
+
+def _build_case_context_legacy(db: Session, case_id: int) -> str:
+    """原有的 agent_output_json 直接注入方式（Fallback）"""
     case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
     if not case:
         return ""
@@ -276,10 +350,10 @@ def _try_generate_title(
         if title:
             conv.title = title
             db.commit()
-            logger.info("对话 %d 自动生成标题: %s", conversation_id, title)
+            logger.info("对话 {} 自动生成标题: {}", conversation_id, title)
 
     except Exception as e:
-        logger.warning("自动生成对话标题失败（不影响对话）: %s", e)
+        logger.warning("自动生成对话标题失败（不影响对话）: {}", e)
 
 
 @router.post("/conversations/{conversation_id}/chat/stream")
@@ -313,7 +387,7 @@ async def chat_stream(
     )
 
     # 构建上下文
-    case_context = _build_case_context(db, case_id)
+    case_context = _build_case_context(db, case_id, user_message=req.message)
     llm_messages = _build_messages_for_llm(
         case_context, history_messages[:-1], req.message  # 排除刚添加的用户消息（已在末尾）
     )
@@ -372,7 +446,7 @@ async def chat_stream(
                 thread_db.close()
 
         except Exception as e:
-            logger.error("对话 LLM 调用失败: %s", e)
+            logger.error("对话 LLM 调用失败: {}", e)
             event_queue.put_nowait(("chat_error", {"error": str(e)}))
 
     async def run_chat():

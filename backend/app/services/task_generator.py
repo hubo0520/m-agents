@@ -5,6 +5,7 @@
 """
 import json
 from datetime import datetime, timedelta, date
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -24,7 +25,7 @@ from app.engine.metrics import get_all_metrics
 
 def _build_merchant_snapshot(db: Session, merchant: Merchant) -> dict:
     """构建商家信息快照"""
-    cutoff_90d = datetime.utcnow() - timedelta(days=90)
+    cutoff_90d = utc_now() - timedelta(days=90)
 
     total_sales = (
         db.query(func.sum(Order.order_amount))
@@ -47,7 +48,7 @@ def _build_merchant_snapshot(db: Session, merchant: Merchant) -> dict:
         "settlement_cycle_days": merchant.settlement_cycle_days,
         "total_sales_90d": round(float(total_sales), 2),
         "total_returns_90d": round(float(total_returns), 2),
-        "snapshot_time": datetime.utcnow().isoformat(),
+        "snapshot_time": utc_now().isoformat(),
     }
 
 
@@ -89,7 +90,7 @@ def _build_historical_settlement(db: Session, merchant_id: int) -> dict:
 
 def _build_return_details(db: Session, merchant_id: int) -> dict:
     """构建退货详情摘要"""
-    cutoff_14d = datetime.utcnow() - timedelta(days=14)
+    cutoff_14d = utc_now() - timedelta(days=14)
 
     returns = (
         db.query(Return, Order)

@@ -6,6 +6,7 @@
 import hashlib
 import json
 from datetime import datetime
+from app.core.utils import utc_now
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -181,7 +182,7 @@ def _execute_mock_tool(tool_name: str, input_data: dict) -> dict:
                 "merchant_id": merchant_id,
                 "credit_score": 85,
                 "credit_level": "优良",
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": utc_now().isoformat(),
             },
         }
     elif tool_name == "submit_advance_settlement":
@@ -190,28 +191,28 @@ def _execute_mock_tool(tool_name: str, input_data: dict) -> dict:
             "success": True,
             "message": "回款加速申请已提交",
             "data": {
-                "application_id": f"AS-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+                "application_id": f"AS-{utc_now().strftime('%Y%m%d%H%M%S')}",
                 "status": "submitted",
-                "estimated_settlement_date": (datetime.utcnow()).isoformat(),
+                "estimated_settlement_date": (utc_now()).isoformat(),
             },
         }
     elif tool_name == "create_financing_draft":
         return {
             "success": True,
             "message": "经营贷草稿已创建",
-            "data": {"draft_id": f"FD-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"},
+            "data": {"draft_id": f"FD-{utc_now().strftime('%Y%m%d%H%M%S')}"},
         }
     elif tool_name == "create_claim_draft":
         return {
             "success": True,
             "message": "理赔草稿已创建",
-            "data": {"draft_id": f"CD-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"},
+            "data": {"draft_id": f"CD-{utc_now().strftime('%Y%m%d%H%M%S')}"},
         }
     elif tool_name == "create_manual_review_task":
         return {
             "success": True,
             "message": "人工复核任务已创建",
-            "data": {"task_id": f"MR-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"},
+            "data": {"task_id": f"MR-{utc_now().strftime('%Y%m%d%H%M%S')}"},
         }
     else:
         return {"success": False, "message": f"未知工具: {tool_name}"}

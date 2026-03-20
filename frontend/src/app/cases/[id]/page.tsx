@@ -782,32 +782,38 @@ export default function CaseDetailPage() {
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded">需人工复核</span>
                 )}
               </div>
-              <MarkdownRenderer content={localizeMetricText(agentOutput.case_summary)} className="mb-4" />
+
+              {/* 案件摘要区域（可滚动） */}
+              <div className="max-h-[420px] overflow-y-auto pr-1 mb-4">
+                <MarkdownRenderer content={localizeMetricText(agentOutput.case_summary)} />
+              </div>
 
               {/* 根因列表 */}
               {agentOutput.root_causes.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-xs font-medium text-slate-500 mb-2">核心成因</h4>
-                  {agentOutput.root_causes.map((rc, i) => (
-                    <div key={i} className="border-l-2 border-orange-300 pl-3 mb-2">
-                      <p className="text-sm font-medium">{rc.label}</p>
-                      <p className="text-xs text-slate-500">{rc.explanation}</p>
-                      <div className="flex gap-1 mt-1">
-                        <span className="text-xs text-slate-400">
-                          置信度: {(rc.confidence * 100).toFixed(0)}%
-                        </span>
-                        {rc.evidence_ids.map((eid) => (
-                          <button
-                            key={eid}
-                            className="text-xs text-blue-500 hover:underline cursor-pointer"
-                            onClick={() => scrollToEvidence(eid)}
-                          >
-                            {eid}
-                          </button>
-                        ))}
+                <div className="border-t border-slate-100 pt-3">
+                  <h4 className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">核心成因</h4>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {agentOutput.root_causes.map((rc, i) => (
+                      <div key={i} className="border-l-2 border-orange-300 pl-3">
+                        <p className="text-sm font-medium text-slate-800">{localizeMetricText(rc.label)}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{localizeMetricText(rc.explanation)}</p>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          <span className="text-xs text-slate-400">
+                            置信度: {(rc.confidence * 100).toFixed(0)}%
+                          </span>
+                          {rc.evidence_ids.map((eid) => (
+                            <button
+                              key={eid}
+                              className="text-xs text-blue-500 hover:underline cursor-pointer"
+                              onClick={() => scrollToEvidence(eid)}
+                            >
+                              {eid}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </Card>

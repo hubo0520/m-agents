@@ -23,20 +23,6 @@ setup_logging()
 # 启动时创建所有表
 Base.metadata.create_all(bind=engine)
 
-# 安全 migration：给已有表添加新列（SQLAlchemy create_all 不会给已有表加列）
-def _safe_add_column(table: str, column: str, col_type: str = "TEXT"):
-    """安全地给已有表添加列，如果列已存在则忽略"""
-    from sqlalchemy import text
-    try:
-        with engine.connect() as conn:
-            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
-            conn.commit()
-            logger.info("Migration: 已添加 %s.%s 列", table, column)
-    except Exception:
-        pass  # 列已存在，忽略
-
-_safe_add_column("eval_results", "judge_input_json", "TEXT")
-
 app = FastAPI(
     title="商家经营保障 Agent V3",
     description="面向内部运营人员的多 Agent 风控执行系统",
@@ -128,5 +114,18 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # 启动时输出 LLM 配置状态
-logger.info("🚀 应用启动 | USE_LLM=%s | OPENAI_BASE_URL=%s | MODEL=%s",
+logger.info("🚀 应用启动 | USE_LLM={} | OPENAI_BASE_URL={} | MODEL={}",
             settings.USE_LLM, settings.OPENAI_BASE_URL, settings.OPENAI_MODEL)
+
+# 启动时输出 RAG / 向量存储状态
+try:
+    from app.core.vector_store import is_vector_store_available, _chromadb_available, _chromadb_init_error
+    if _chromadb_available:
+        vs_ok = is_vector_store_available()
+        logger.info("🔍 RAG 状态 | chromadb_module=✅ | vector_store_ready={} | EMBEDDING_MODEL={}",
+                     vs_ok, settings.EMBEDDING_MODEL)
+    else:
+        logger.warning("🔍 RAG 状态 | chromadb_module=❌ 不可用 | 原因={} | 对话将降级为 agent_output_json 模式",
+                        _chromadb_init_error or "未知")
+except Exception as e:
+    logger.warning("🔍 RAG 状态检测失败: {}", e)

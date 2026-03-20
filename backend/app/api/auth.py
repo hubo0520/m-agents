@@ -2,6 +2,7 @@
 认证 API：系统初始化、注册、登录、Token 刷新、修改密码、获取用户信息
 """
 from datetime import datetime
+from app.core.utils import utc_now
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
@@ -121,7 +122,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         raise AuthException("账号已被禁用，请联系管理员", status_code=403)
 
     # 更新最后登录时间
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = utc_now()
     db.commit()
     db.refresh(user)
 

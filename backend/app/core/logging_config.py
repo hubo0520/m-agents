@@ -34,6 +34,7 @@ def setup_logging():
             '"name": "{name}", '
             '"function": "{function}", '
             '"line": {line}, '
+            '"trace_id": "{extra[trace_id]}", '
             '"message": "{message}"'
             '}'
         )
@@ -43,6 +44,7 @@ def setup_logging():
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+            "<dim>{extra[trace_id]}</dim> | "
             "<level>{message}</level>"
         )
     else:
@@ -63,6 +65,9 @@ def setup_logging():
         backtrace=True,
         diagnose=True,
     )
+
+    # 配置默认 extra 字段（避免 KeyError）
+    logger.configure(extra={"trace_id": "-"})
     
     # 添加文件处理器（可选，可根据需要启用）
     # log_file = os.getenv("LOG_FILE", "app.log")
@@ -103,3 +108,8 @@ def get_logger(name: str = None):
     if name:
         return logger.bind(name=name)
     return logger
+
+
+def bind_trace_id(trace_id: str):
+    """绑定 trace_id 到当前日志上下文，便于请求链路追踪"""
+    return logger.bind(trace_id=trace_id)

@@ -94,12 +94,12 @@ def generate_summary(metrics: dict, evidence: List[dict]) -> dict:
 from app.agents.schemas import AgentInput, DiagnosisOutput, DiagnosisRootCause
 
 
-def run_diagnosis(agent_input: AgentInput, metrics: dict, evidence: list, on_llm_event=None) -> DiagnosisOutput:
+def run_diagnosis(agent_input: AgentInput, metrics: dict, evidence: list, on_llm_event=None, analysis_context: str = "") -> DiagnosisOutput:
     """V3 适配器：将现有分析逻辑包装为 DiagnosisOutput，支持 LLM / 规则引擎双路径"""
     from app.core.llm_client import is_llm_enabled
 
     if is_llm_enabled():
-        return _run_diagnosis_llm(agent_input, metrics, evidence, on_llm_event=on_llm_event)
+        return _run_diagnosis_llm(agent_input, metrics, evidence, on_llm_event=on_llm_event, analysis_context=analysis_context)
 
     # 回退到规则引擎
     result = generate_summary(metrics, evidence)
@@ -135,23 +135,60 @@ import json
 from loguru import logger
 
 
-def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list, on_llm_event=None) -> DiagnosisOutput:
+DEFAULT_DIAGNOSIS_PROMPT = """你是一个电商平台资深风控分析专家 Agent，擅长从商家经营指标和证据数据中识别风险根因。
+
+## 分析框架（请严格按以下 5 步进行推理）
+
+**第 1 步 — 识别异常指标**：逐一检查 return_amplification、anomaly_score、avg_settlement_delay、predicted_gap、refund_pressure_7d，标注哪些指标偏离正常范围。
+
+**第 2 步 — 关联证据链**：将异常指标与证据列表中的具体 evidence_id 对应。例如：退货放大率高 → 对应 return 类型证据；回款延迟 → 对应 settlement 类型证据。
+
+**第 3 步 — 推断根因**：基于异常指标和关联证据，推断 1~3 个根因（root_causes）。每个根因须包含：label（中文标签）、explanation（具体数据支撑的解释）、confidence（置信度 0~1）、evidence_ids（引用的证据 ID）。
+
+**第 4 步 — 判定风险等级**：
+- **high**: anomaly_score ≥ 0.7 或 predicted_gap ≥ 100000 或 (return_amplification ≥ 1.6 且 predicted_gap ≥ 50000)
+- **medium**: anomaly_score ≥ 0.3 或 return_amplification ≥ 1.3 或 avg_settlement_delay ≥ 2
+- **low**: 不满足以上条件
+
+**第 5 步 — 生成业务摘要**：用 1~2 句话概括风险全貌，面向非技术业务人员可读。
+
+## Few-Shot 示例
+
+**输入**:
+- return_amplification: 1.8, anomaly_score: 0.35, predicted_gap: 75000, avg_settlement_delay: 3.2
+- 证据: EV-101(退货,退款¥5200), EV-102(退货,退款¥3800), EV-103(回款延迟3天)
+
+**期望输出**:
+```json
+{
+  "root_causes": [
+    {"label": "退货率异常上升", "explanation": "近7日退货放大1.8倍，EV-101和EV-102显示集中退货退款合计¥9000", "confidence": 0.82, "evidence_ids": ["EV-101", "EV-102"]},
+    {"label": "回款延迟扩大", "explanation": "平均回款延迟3.2天，EV-103显示典型延迟案例", "confidence": 0.75, "evidence_ids": ["EV-103"]}
+  ],
+  "business_summary": "该商家近7日退货率显著放大1.8倍，同时回款延迟扩大至3.2天，预计14日内现金缺口¥75,000，需关注流动性风险。",
+  "risk_level": "high",
+  "manual_review_required": false
+}
+```
+
+## 反面约束（严格遵守）
+- ❌ 不要编造不存在的 evidence_id，只能引用输入中实际出现的证据 ID
+- ❌ 不要将正常的季节性波动（如节日促销后退货率小幅上升）误判为风险信号
+- ❌ 不要在 business_summary 中使用技术术语（如 anomaly_score），应转化为业务语言
+- ❌ confidence 不要随意设置，必须基于证据充分度和指标偏离程度
+- ❌ **label 必须使用中文**（如"退货率异常上升"、"回款延迟扩大"），严禁使用英文标签（如 operational_slippage、settlement_latency）
+- ❌ **explanation 必须使用中文**，不要混入英文术语
+
+请严格按照输出 Schema 返回结构化 JSON。"""
+
+
+def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list, on_llm_event=None, analysis_context: str = "") -> DiagnosisOutput:
     """使用 LLM 生成诊断结果（OPENAI_BASE_URL 在 llm_client 中生效）"""
-    from app.core.llm_client import structured_output, LlmEvent
+    from app.core.llm_client import structured_output, LlmEvent, load_prompt
 
     logger.info("案件 %s 使用 LLM 路径生成诊断结果", agent_input.case_id)
 
-    system_prompt = """你是一个电商平台风险分析专家 Agent。
-你的任务是根据商家的指标数据和证据，生成一份根因分析诊断报告。
-
-分析要点：
-1. 识别退货率异常、回款延迟、异常退货模式等风险信号
-2. 给出根因标签、解释和置信度
-3. 生成面向业务人员的可读摘要
-4. 判断风险等级（high/medium/low）
-5. 判断是否需要人工复核
-
-请严格按照输出 Schema 返回结构化 JSON。"""
+    system_prompt, _prompt_version = load_prompt("diagnosis_agent", default=DEFAULT_DIAGNOSIS_PROMPT)
 
     user_prompt = f"""## 案件信息
 - 案件编号: {agent_input.case_id}
@@ -162,6 +199,9 @@ def _run_diagnosis_llm(agent_input: AgentInput, metrics: dict, evidence: list, o
 
 ## 证据列表
 {json.dumps(evidence, ensure_ascii=False, indent=2)}
+
+## 上游分析链路
+{analysis_context if analysis_context else '无'}
 
 请基于以上信息生成诊断分析。"""
 

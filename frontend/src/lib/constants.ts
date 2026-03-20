@@ -268,8 +268,54 @@ export function getRiskLevelLabel(level: string): string {
   return RISK_LEVEL_LABEL_MAP[level.toLowerCase()] ?? level;
 }
 
+// ─────────── 案件状态英文→中文映射（用于 LLM 摘要中的英文状态翻译） ───────────
+const STATUS_TEXT_MAP: Record<string, string> = {
+  "PENDING_APPROVAL":  "待审批",
+  "BLOCKED_BY_GUARD":  "合规拦截",
+  "COMPLETED":         "已完成",
+  "COMPLETED_WITH_ERRORS": "已完成（有异常）",
+  "APPROVED":          "已通过",
+  "REJECTED":          "已驳回",
+  "ANALYZING":         "分析中",
+  "ANALYZED":          "已分析",
+  "EXECUTING":         "执行中",
+  "NEW":               "新建",
+  "PENDING_REVIEW":    "待审核",
+  "WAITING_CALLBACK":  "等待回调",
+  "PAUSED":            "已暂停",
+};
+
+// ─────────── 常见 Agent 英文标签→中文映射（用于 LLM 输出中的下划线标签翻译） ───────────
+const LABEL_TEXT_MAP: Record<string, string> = {
+  // 根因标签
+  operational_slippage:    "履约执行滑坡",
+  settlement_latency:     "结算时效滞后",
+  return_anomaly:         "退货异常",
+  cash_flow_pressure:     "现金流压力",
+  fraud_signal:           "欺诈信号",
+  refund_surge:           "退款激增",
+  logistics_delay:        "物流延迟",
+  quality_issue:          "品质问题",
+  // action_type 标签
+  advance_settlement:     "回款加速",
+  business_loan:          "经营贷",
+  insurance_adjust:       "保险调整",
+  anomaly_review:         "异常复核",
+  fraud_review:           "反欺诈复核",
+  manual_handoff:         "人工接管",
+  risk_monitoring:        "风险监控",
+  claim_submission:       "理赔提交",
+  // 其他英文术语
+  manual_review_required: "需人工复核",
+  requires_manual_review: "需人工复核",
+  case_type:              "案件类型",
+  risk_level:             "风险等级",
+  cash_gap:               "现金缺口",
+  suspected_fraud:        "疑似欺诈",
+};
+
 /**
- * 将文本中的英文指标名替换为中文
+ * 将文本中的英文指标名、状态、标签替换为中文
  * 匹配模式：metric_name=value 或单独的 metric_name
  */
 export function localizeMetricText(text: string): string {
@@ -277,9 +323,22 @@ export function localizeMetricText(text: string): string {
 
   let result = text;
 
-  // 先按长度降序排列 key，确保长 key 优先匹配（如 return_rate_14d 优先于 return_rate）
-  const sortedKeys = Object.keys(METRIC_NAME_MAP).sort((a, b) => b.length - a.length);
+  // 1. 替换案件状态（全大写形式，如 PENDING_APPROVAL）
+  const statusSorted = Object.keys(STATUS_TEXT_MAP).sort((a, b) => b.length - a.length);
+  for (const key of statusSorted) {
+    const regex = new RegExp(key, "g");
+    result = result.replace(regex, STATUS_TEXT_MAP[key]);
+  }
 
+  // 2. 替换英文标签（下划线分隔形式，如 operational_slippage）
+  const labelSorted = Object.keys(LABEL_TEXT_MAP).sort((a, b) => b.length - a.length);
+  for (const key of labelSorted) {
+    const regex = new RegExp(`\\b${key}\\b`, "gi");
+    result = result.replace(regex, LABEL_TEXT_MAP[key]);
+  }
+
+  // 3. 替换英文指标名
+  const sortedKeys = Object.keys(METRIC_NAME_MAP).sort((a, b) => b.length - a.length);
   for (const key of sortedKeys) {
     const label = METRIC_NAME_MAP[key];
     // 匹配 metric_name=xxx 或 metric_name: xxx 格式
@@ -291,7 +350,7 @@ export function localizeMetricText(text: string): string {
     result = result.replace(regexAlone, label);
   }
 
-  // 替换英文风险等级
+  // 4. 替换英文风险等级
   const riskLevelRegex = /\b(critical|high|medium|low)\b/gi;
   result = result.replace(riskLevelRegex, (match) => {
     return RISK_LEVEL_LABEL_MAP[match.toLowerCase()] ?? match;

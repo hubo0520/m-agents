@@ -29,4 +29,7 @@ dist/
 build/
 *.egg-info/
 
+# 向量数据库存储
+vector_data/
+
 openspec
