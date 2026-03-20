@@ -4,7 +4,7 @@
 # ============================================================
 
 # ── 阶段 1：安装依赖 ──
-FROM node:18-alpine AS deps
+FROM docker.m.daocloud.io/library/node:18-alpine AS deps
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --only=production
 
 # ── 阶段 2：构建 ──
-FROM node:18-alpine AS builder
+FROM docker.m.daocloud.io/library/node:18-alpine AS builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ COPY . .
 RUN npm run build
 
 # ── 阶段 3：运行镜像 ──
-FROM node:18-alpine AS runner
+FROM docker.m.daocloud.io/library/node:18-alpine AS runner
 
 WORKDIR /app
 

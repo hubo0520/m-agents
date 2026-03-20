@@ -4,7 +4,7 @@
 # ============================================================
 
 # ── 阶段 1：安装依赖 ──
-FROM python:3.11-slim AS builder
+FROM docker.m.daocloud.io/library/python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -19,7 +19,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── 阶段 2：运行镜像 ──
-FROM python:3.11-slim
+FROM docker.m.daocloud.io/library/python:3.11-slim
 
 WORKDIR /app
 
