@@ -1,0 +1,180 @@
+# ============================================================
+# m-agents 全栈 Docker Compose 编排
+#
+# 包含服务：
+#   - backend:   FastAPI 后端 (Python)
+#   - frontend:  Next.js 前端 (Node.js)
+#   - mysql:     MySQL 8.0 数据库
+#   - nginx:     反向代理（统一入口 :80）
+#   - loki:      日志存储引擎
+#   - promtail:  日志采集代理
+#   - grafana:   日志可视化面板 (:3100)
+#
+# 使用方法：
+#   docker compose up -d          # 一键启动全部服务
+#   docker compose down           # 停止并移除容器（保留数据卷）
+#   docker compose logs -f backend  # 查看后端日志
+#
+# 环境变量：
+#   在项目根目录创建 .env 文件配置（参考 .env.example）
+# ============================================================
+
+services:
+  # ── MySQL 数据库 ──
+  mysql:
+    image: mysql:8.0
+    container_name: m-agents-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Hjb0520+-}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-m_agents}
+      MYSQL_CHARSET: utf8mb4
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-Hjb0520+-}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── 后端 FastAPI ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: m-agents-backend
+    environment:
+      # 数据库连接（指向 docker 内部 MySQL）
+      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-Hjb0520+-}@mysql:3306/${MYSQL_DATABASE:-m_agents}
+      # LLM 配置
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-qwen-plus}
+      USE_LLM: ${USE_LLM:-true}
+      # JWT 认证
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      DEBUG_AUTH: ${DEBUG_AUTH:-true}
+      # 日志配置
+      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
+      LOG_DIR: /app/logs
+      LOG_ROTATION_SIZE: ${LOG_ROTATION_SIZE:-50 MB}
+      LOG_RETENTION_SIZE: ${LOG_RETENTION_SIZE:-1 GB}
+      LOG_COMPRESSION: ${LOG_COMPRESSION:-gz}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # 向量存储
+      VECTOR_STORE_DIR: ${VECTOR_STORE_DIR:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v4}
+      # CORS（容器环境下 Nginx 代理，可放宽）
+      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://frontend:3000"]'
+    volumes:
+      - app-logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── 前端 Next.js ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: m-agents-frontend
+    environment:
+      NODE_ENV: production
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── Nginx 反向代理 ──
+  nginx:
+    image: nginx:alpine
+    container_name: m-agents-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── Loki：日志存储引擎 ──
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: m-agents-loki
+    ports:
+      - "3200:3100"
+    volumes:
+      - ./infra/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── Promtail：日志采集代理 ──
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: m-agents-promtail
+    volumes:
+      - ./infra/promtail-config.yml:/etc/promtail/config.yml:ro
+      - app-logs:/var/log/m-agents:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── Grafana：可视化面板 ──
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: m-agents-grafana
+    ports:
+      - "${GRAFANA_PORT:-3100}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - app-network
+
+# ── 命名卷 ──
+volumes:
+  mysql-data:       # MySQL 数据持久化
+  app-logs:         # 后端日志（backend 写入，promtail 读取）
+  loki-data:        # Loki 索引和块存储
+  grafana-data:     # Grafana 仪表板和配置
+
+# ── 网络 ──
+networks:
+  app-network:
+    driver: bridge

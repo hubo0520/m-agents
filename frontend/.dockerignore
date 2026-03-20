@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+.DS_Store
+out/
+dist/
+build/
