@@ -122,7 +122,7 @@ services:
 
   # ── Loki：日志存储引擎 ──
   loki:
-    image: grafana/loki:2.9.4
+    image: docker.m.daocloud.io/grafana/loki:2.9.4
     container_name: m-agents-loki
     ports:
       - "3200:3100"
@@ -136,7 +136,7 @@ services:
 
   # ── Promtail：日志采集代理 ──
   promtail:
-    image: grafana/promtail:2.9.4
+    image: docker.m.daocloud.io/grafana/promtail:2.9.4
     container_name: m-agents-promtail
     volumes:
       - ./infra/promtail-config.yml:/etc/promtail/config.yml:ro
@@ -150,7 +150,7 @@ services:
 
   # ── Grafana：可视化面板 ──
   grafana:
-    image: grafana/grafana:10.3.1
+    image: docker.m.daocloud.io/grafana/grafana:10.3.1
     container_name: m-agents-grafana
     ports:
       - "${GRAFANA_PORT:-3100}:3000"
