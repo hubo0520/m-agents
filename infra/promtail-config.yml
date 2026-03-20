@@ -1,0 +1,48 @@
+# ============================================================
+# Promtail 配置 - 日志采集代理
+#
+# 功能：
+#   - 自动发现并采集 /var/log/m-agents/ 下的 .log 文件
+#   - 为日志添加 app、env 等 label 标签
+#   - 将日志推送至 Loki 存储引擎
+# ============================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# Promtail 位置记录（记住已读取的偏移量，避免重复采集）
+positions:
+  filename: /tmp/positions.yaml
+
+# Loki 推送目标
+clients:
+  - url: http://loki:3100/loki/api/v1/push   # Loki 容器内部地址
+
+# 日志采集配置
+scrape_configs:
+  - job_name: m-agents-app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          app: m-agents            # 应用名称标签
+          env: development         # 环境标签（可按需修改为 production）
+          __path__: /var/log/m-agents/*.log   # 采集所有 .log 文件
+
+    # 管道配置：从日志行中提取结构化字段
+    pipeline_stages:
+      # 尝试按 detailed 格式解析日志行
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \| (?P<level>\w+)\s+\| (?P<module>[^|]+)\| trace_id=(?P<trace_id>[^|]+)\| (?P<message>.*)$'
+
+      # 将提取的字段设为 label（便于 Grafana 中过滤）
+      - labels:
+          level:
+          trace_id:
+
+      # 设置时间戳
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02 15:04:05.000"   # Go 时间格式
+          location: Asia/Shanghai

@@ -1,0 +1,57 @@
+# ============================================================
+# Loki 配置 - 日志存储引擎
+#
+# 模式：单机本地文件系统存储
+# 适用场景：单节点开发/小型生产环境
+# ============================================================
+
+auth_enabled: false   # 单机模式无需认证
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks    # 日志块存储目录
+      rules_directory: /loki/rules      # 规则存储目录
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+# 索引模式配置
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb                       # 使用 TSDB 存储引擎（Loki 2.8+ 推荐）
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h                     # 每 24 小时创建一个新索引
+
+# 查询调度器（单机模式使用内存调度）
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100                # 查询缓存大小上限
+
+# 数据保留策略
+limits_config:
+  retention_period: 720h                # 日志保留 30 天（720 小时）
+  max_query_series: 5000
+  max_query_parallelism: 2
+
+# 压缩器配置
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m              # 每 10 分钟运行一次压缩
+  retention_enabled: true               # 启用自动数据清理
+  retention_delete_delay: 2h            # 删除延迟（安全缓冲）
+  retention_delete_worker_count: 150

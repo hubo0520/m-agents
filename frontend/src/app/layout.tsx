@@ -3,8 +3,11 @@ import "./globals.css";
 import { ClientLayout } from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
-  title: "商家经营保障 Agent V3",
+  title: "商家经营保障 Agent",
   description: "面向内部运营人员的多 Agent 风控执行系统",
+  icons: {
+    icon: "/icon",
+  },
 };
 
 export default function RootLayout({

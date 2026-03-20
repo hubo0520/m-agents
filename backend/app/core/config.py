@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     # 日志配置
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "simple"
+    LOG_FILE_ENABLED: bool = True          # 是否启用文件日志
+    LOG_DIR: str = "logs"                   # 日志目录路径
+    LOG_ROTATION_SIZE: str = "50 MB"        # 单文件滚动大小
+    LOG_RETENTION_SIZE: str = "1 GB"        # 日志目录总大小上限
+    LOG_COMPRESSION: str = "gz"             # 压缩格式（空字符串禁用）
 
     # 经营贷资格
     MIN_OPERATION_DAYS: int = 60

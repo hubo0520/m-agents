@@ -29,6 +29,9 @@ dist/
 build/
 *.egg-info/
 
+# 日志文件
+logs/
+
 # 向量数据库存储
 vector_data/
 

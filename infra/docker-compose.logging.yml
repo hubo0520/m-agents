@@ -1,0 +1,69 @@
+# ============================================================
+# 日志可视化平台 - Docker Compose 配置
+# Grafana Loki + Promtail + Grafana
+#
+# 使用方法：
+#   docker-compose -f docker-compose.logging.yml up -d
+#
+# 访问地址：
+#   - Grafana:  http://localhost:3100 (admin/admin)
+#   - Loki:     http://localhost:3200 (内部服务，一般不直接访问)
+# ============================================================
+
+version: "3.8"
+
+services:
+  # ── Loki：日志存储引擎 ──
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: m-agents-loki
+    ports:
+      - "3200:3100"         # Loki API 端口（映射到宿主机 3200 避免与 Grafana 冲突）
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml:ro   # Loki 配置文件
+      - loki-data:/loki                                      # Loki 数据持久化
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      - logging
+
+  # ── Promtail：日志采集代理 ──
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: m-agents-promtail
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro   # Promtail 配置文件
+      - ../backend/logs:/var/log/m-agents:ro                 # 挂载应用日志目录（只读）
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - logging
+
+  # ── Grafana：可视化面板 ──
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: m-agents-grafana
+    ports:
+      - "3100:3000"         # Grafana Web UI 端口（映射到宿主机 3100）
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin            # 默认管理员用户名
+      - GF_SECURITY_ADMIN_PASSWORD=admin        # 默认管理员密码
+      - GF_AUTH_ANONYMOUS_ENABLED=true          # 允许匿名访问（开发环境）
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer       # 匿名用户角色
+    volumes:
+      - grafana-data:/var/lib/grafana           # Grafana 数据持久化
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - logging
+
+volumes:
+  loki-data:       # Loki 索引和块存储
+  grafana-data:    # Grafana 仪表板和配置
+
+networks:
+  logging:
+    driver: bridge
