@@ -255,6 +255,7 @@ class RiskCase(Base):
     financing_applications = relationship("FinancingApplication", back_populates="risk_case")
     claims = relationship("Claim", back_populates="risk_case")
     manual_reviews = relationship("ManualReview", back_populates="risk_case")
+    conversations = relationship("Conversation", back_populates="risk_case")
 
     __table_args__ = (
         Index("ix_risk_cases_merchant_id", "merchant_id"),
@@ -595,6 +596,11 @@ class EvalRun(Base):
     evidence_coverage_rate = Column(Float, nullable=True)
     schema_pass_rate = Column(Float, nullable=True)
     hallucination_rate = Column(Float, nullable=True)
+    # V5: 评测进度和 Judge 聚合字段
+    completed_count = Column(Integer, nullable=True, default=0)
+    total_count = Column(Integer, nullable=True, default=0)
+    avg_judge_score = Column(Float, nullable=True)
+    avg_latency_ms = Column(Integer, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
 
@@ -614,4 +620,52 @@ class EvalResult(Base):
     has_hallucination = Column(Integer, nullable=True)  # 0/1
     schema_valid = Column(Integer, nullable=True)  # 0/1
     evidence_covered = Column(Integer, nullable=True)  # 0/1
+    # V5: LLM-Judge 评分字段
+    judge_score = Column(Float, nullable=True)  # LLM-Judge 综合评分 0-100
+    judge_reasoning = Column(Text, nullable=True)  # LLM-Judge 评分理由
+    judge_input_json = Column(Text, nullable=True)  # 发送给 Judge LLM 的完整 messages
+    latency_ms = Column(Integer, nullable=True)  # 工作流执行耗时(毫秒)
+    risk_level_match = Column(Integer, nullable=True)  # 风险等级匹配 0/1
+    root_cause_match = Column(Integer, nullable=True)  # 根因覆盖 0/1
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ═══════════════════════════════════════════════════════════════
+# V4: 对话式分析表
+# ═══════════════════════════════════════════════════════════════
+
+# ─────────────────────── 26. conversations ───────────────────────
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    case_id = Column(Integer, ForeignKey("risk_cases.id"), nullable=False)
+    title = Column(String(256), nullable=False, default="新对话")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    risk_case = relationship("RiskCase", back_populates="conversations")
+    messages = relationship("ConversationMessage", back_populates="conversation", order_by="ConversationMessage.created_at")
+
+    __table_args__ = (
+        Index("ix_conversations_case_id", "case_id"),
+    )
+
+
+# ─────────────────────── 27. conversation_messages ───────────────────────
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
+    role = Column(String(16), nullable=False)  # "user" | "assistant"
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    conversation = relationship("Conversation", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_conversation_messages_conversation_id", "conversation_id"),
+    )

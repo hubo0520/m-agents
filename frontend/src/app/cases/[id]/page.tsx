@@ -20,11 +20,13 @@ import AnalysisWorkflowPanel, {
 } from "@/components/AnalysisWorkflowPanel";
 import type { LlmStepData } from "@/components/LlmDetailPanel";
 import type { CaseDetail, ReviewRequest, UnifiedTask } from "@/types";
-import { getCaseStatusLabel, getCaseStatusColor, getTaskStatusLabel, getTaskStatusColor, getAuditActionLabel, parseAuditValue, getEvidenceTypeLabel, formatEvidenceSummary } from "@/lib/constants";
+import { getCaseStatusLabel, getCaseStatusColor, getTaskStatusLabel, getTaskStatusColor, getAuditActionLabel, parseAuditValue, getEvidenceTypeLabel, formatEvidenceSummary, localizeMetricText, getActionTypeLabel, getActionTypeColor, getRiskLevelLabel } from "@/lib/constants";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
+import ConversationPanel from "@/components/ConversationPanel";
 import {
   LineChart,
   Line,
@@ -774,7 +776,7 @@ export default function CaseDetailPage() {
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded">需人工复核</span>
                 )}
               </div>
-              <p className="text-sm text-slate-700 mb-4">{agentOutput.case_summary}</p>
+              <MarkdownRenderer content={localizeMetricText(agentOutput.case_summary)} className="mb-4" />
 
               {/* 根因列表 */}
               {agentOutput.root_causes.length > 0 && (
@@ -834,14 +836,17 @@ export default function CaseDetailPage() {
                         <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${confColor}`}>
                           {(confidence * 100).toFixed(0)}%
                         </span>
-                        <span className="text-sm font-medium flex-1">{rec.title}</span>
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${getActionTypeColor(rec.action_type)}`}>
+                          {getActionTypeLabel(rec.action_type)}
+                        </span>
+                        <span className="text-sm font-medium flex-1">{localizeMetricText(rec.title)}</span>
                         {rec.requires_manual_review && (
                           <span className="text-xs bg-red-50 text-red-600 px-1.5 py-0.5 rounded font-medium">
                             需复核
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 mb-1.5 leading-relaxed">{rec.why}</p>
+                      <p className="text-xs text-slate-500 mb-1.5 leading-relaxed">{localizeMetricText(rec.why)}</p>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-400">预期: {
                           typeof rec.expected_benefit === 'string'
@@ -1064,6 +1069,9 @@ export default function CaseDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* 对话式分析面板 */}
+      {data && <ConversationPanel caseId={caseId} caseStatus={data.status} />}
 
       {/* 审批抽屉 */}
       {data && (

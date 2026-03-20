@@ -217,6 +217,89 @@ const RULE_NAME_MAP: Record<string, string> = {
   refund_amount:         "退款金额",
 };
 
+// ─────────── action_type 中文映射 ───────────
+export const ACTION_TYPE_MAP: Record<string, { label: string; color: string }> = {
+  advance_settlement:  { label: "回款加速",   color: "bg-cyan-100 text-cyan-700" },
+  business_loan:       { label: "经营贷",     color: "bg-green-100 text-green-700" },
+  insurance_adjust:    { label: "保险调整",   color: "bg-indigo-100 text-indigo-700" },
+  anomaly_review:      { label: "异常复核",   color: "bg-orange-100 text-orange-700" },
+  fraud_review:        { label: "反欺诈复核", color: "bg-red-100 text-red-700" },
+  manual_handoff:      { label: "人工接管",   color: "bg-purple-100 text-purple-700" },
+  claim_submission:    { label: "理赔提交",   color: "bg-amber-100 text-amber-700" },
+  risk_monitoring:     { label: "风险监控",   color: "bg-blue-100 text-blue-700" },
+};
+
+export function getActionTypeLabel(type: string): string {
+  return ACTION_TYPE_MAP[type]?.label ?? type;
+}
+
+export function getActionTypeColor(type: string): string {
+  return ACTION_TYPE_MAP[type]?.color ?? "bg-slate-100 text-slate-600";
+}
+
+// ─────────── 指标名英文→中文映射 ───────────
+export const METRIC_NAME_MAP: Record<string, string> = {
+  anomaly_score:           "异常分数",
+  return_rate_7d:          "近7日退货率",
+  return_rate_14d:         "近14日退货率",
+  return_rate_28d:         "近28日退货率",
+  return_amplification:    "退货放大倍数",
+  predicted_gap:           "预测现金缺口",
+  settlement_delay_days:   "回款延迟天数",
+  cash_gap:                "现金缺口",
+  refund_pressure_7d:      "7日退款压力",
+  avg_settlement_delay:    "平均回款延迟",
+  order_amount:            "订单金额",
+  refund_amount:           "退款金额",
+  settlement_amount:       "回款金额",
+  confidence:              "置信度",
+  risk_score:              "风险分数",
+};
+
+// ─────────── risk_level 英文→中文映射 ───────────
+export const RISK_LEVEL_LABEL_MAP: Record<string, string> = {
+  critical: "极高",
+  high:     "高",
+  medium:   "中",
+  low:      "低",
+};
+
+export function getRiskLevelLabel(level: string): string {
+  return RISK_LEVEL_LABEL_MAP[level.toLowerCase()] ?? level;
+}
+
+/**
+ * 将文本中的英文指标名替换为中文
+ * 匹配模式：metric_name=value 或单独的 metric_name
+ */
+export function localizeMetricText(text: string): string {
+  if (!text) return text;
+
+  let result = text;
+
+  // 先按长度降序排列 key，确保长 key 优先匹配（如 return_rate_14d 优先于 return_rate）
+  const sortedKeys = Object.keys(METRIC_NAME_MAP).sort((a, b) => b.length - a.length);
+
+  for (const key of sortedKeys) {
+    const label = METRIC_NAME_MAP[key];
+    // 匹配 metric_name=xxx 或 metric_name: xxx 格式
+    const regexWithValue = new RegExp(`\\b${key}\\s*[=:：]`, "g");
+    result = result.replace(regexWithValue, `${label}=`);
+
+    // 匹配单独出现的 metric_name（词边界）
+    const regexAlone = new RegExp(`\\b${key}\\b`, "g");
+    result = result.replace(regexAlone, label);
+  }
+
+  // 替换英文风险等级
+  const riskLevelRegex = /\b(critical|high|medium|low)\b/gi;
+  result = result.replace(riskLevelRegex, (match) => {
+    return RISK_LEVEL_LABEL_MAP[match.toLowerCase()] ?? match;
+  });
+
+  return result;
+}
+
 /** 格式化证据 summary：将英文规则名替换为中文，数值按类型格式化 */
 export function formatEvidenceSummary(summary: string): string {
   if (!summary) return summary;

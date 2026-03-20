@@ -10,6 +10,9 @@ from app.core.database import engine, Base
 from app.api import risk_cases, dashboard, tasks
 # V3: 新增 API 模块
 from app.api import workflows, approvals, configs, evals
+# V4: 对话式分析 & 可观测
+from app.api import conversations as conversations_api
+from app.api import observability as observability_api
 # V3: 认证与用户管理
 from app.api import auth as auth_api, users as users_api
 
@@ -29,6 +32,20 @@ logger = logging.getLogger(__name__)
 
 # 启动时创建所有表
 Base.metadata.create_all(bind=engine)
+
+# 安全 migration：给已有表添加新列（SQLAlchemy create_all 不会给已有表加列）
+def _safe_add_column(table: str, column: str, col_type: str = "TEXT"):
+    """安全地给已有表添加列，如果列已存在则忽略"""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+            conn.commit()
+            logger.info("Migration: 已添加 %s.%s 列", table, column)
+    except Exception:
+        pass  # 列已存在，忽略
+
+_safe_add_column("eval_results", "judge_input_json", "TEXT")
 
 app = FastAPI(
     title="商家经营保障 Agent V3",
@@ -63,6 +80,10 @@ app.include_router(evals.router)
 # 注册路由 — 认证与用户管理
 app.include_router(auth_api.router)
 app.include_router(users_api.router)
+
+# 注册路由 — V4 对话式分析
+app.include_router(conversations_api.router)
+app.include_router(observability_api.router)
 
 
 @app.get("/health")

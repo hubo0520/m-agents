@@ -350,21 +350,44 @@ export interface EvalRunItem {
   dataset_id: number;
   model_name: string;
   status: string;
+  completed_count: number;
+  total_count: number;
   adoption_rate: number | null;
   rejection_rate: number | null;
   evidence_coverage_rate: number | null;
   schema_pass_rate: number | null;
   hallucination_rate: number | null;
+  avg_judge_score: number | null;
+  avg_latency_ms: number | null;
   started_at: string | null;
   ended_at: string | null;
 }
 
 export interface EvalResultItem {
   test_case_index: number;
+  input_json: string | null;
+  expected_output_json: string | null;
+  actual_output_json: string | null;
   adopted: number | null;
   has_hallucination: number | null;
   schema_valid: number | null;
   evidence_covered: number | null;
+  judge_score: number | null;
+  judge_reasoning: string | null;
+  judge_input_json: string | null;
+  latency_ms: number | null;
+  risk_level_match: number | null;
+  root_cause_match: number | null;
+}
+
+export interface EvalRunDetail extends EvalRunItem {
+  prompt_version: string | null;
+  schema_version: string | null;
+  results: EvalResultItem[];
+}
+
+export interface EvalDatasetDetail extends EvalDatasetItem {
+  test_cases: Array<{ input: Record<string, unknown>; expected_output: Record<string, unknown> }>;
 }
 
 export interface WorkflowTrace {

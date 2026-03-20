@@ -6,6 +6,8 @@ import type {
   EvidenceItem,
   DashboardStats,
   ReviewRequest,
+  EvalRunDetail,
+  EvalDatasetDetail,
 } from "@/types";
 import { authFetch } from "./api-client";
 
@@ -368,7 +370,7 @@ export async function getEvalRuns(): Promise<{ items: EvalRunItem[] }> {
 }
 
 /* 创建评测运行 */
-export async function createEvalRun(data: { dataset_id: number; model_name?: string; prompt_version?: string }): Promise<EvalRunItem> {
+export async function createEvalRun(data: { dataset_id: number; model_name?: string; prompt_version?: string; reuse_existing?: boolean }): Promise<EvalRunItem> {
   return fetchAPI("/api/evals/runs", {
     method: "POST",
     body: JSON.stringify(data),
@@ -376,6 +378,115 @@ export async function createEvalRun(data: { dataset_id: number; model_name?: str
 }
 
 /* 获取评测运行详情 */
-export async function getEvalRun(evalRunId: number): Promise<EvalRunItem & { results: unknown[] }> {
+export async function getEvalRun(evalRunId: number): Promise<EvalRunDetail> {
   return fetchAPI(`/api/evals/runs/${evalRunId}`);
+}
+
+/* 获取数据集详情（含测试用例） */
+export async function getEvalDataset(datasetId: number): Promise<EvalDatasetDetail> {
+  return fetchAPI(`/api/evals/datasets/${datasetId}`);
+}
+
+/* 更新数据集 */
+export async function updateEvalDataset(datasetId: number, data: { name?: string; description?: string; test_cases?: unknown[] }): Promise<{ id: number }> {
+  return fetchAPI(`/api/evals/datasets/${datasetId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+/* 从线上案件导入为数据集 */
+export async function importCasesToDataset(data: { case_ids: number[]; dataset_name: string; description?: string }): Promise<{ id: number; test_case_count: number }> {
+  return fetchAPI("/api/evals/datasets/import-from-cases", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/* ─────── V4: 对话式分析 API ─────── */
+
+export interface ConversationItem {
+  id: number;
+  case_id: number;
+  title: string;
+  message_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ConversationMessageItem {
+  id: number;
+  conversation_id: number;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string | null;
+}
+
+/* 创建对话会话 */
+export async function createConversation(
+  caseId: number,
+  title?: string
+): Promise<{ id: number; case_id: number; title: string; created_at: string | null }> {
+  return fetchAPI(`/api/cases/${caseId}/conversations`, {
+    method: "POST",
+    body: JSON.stringify({ title: title || "新对话" }),
+  });
+}
+
+/* 获取案件对话列表 */
+export async function getConversations(caseId: number): Promise<ConversationItem[]> {
+  return fetchAPI<ConversationItem[]>(`/api/cases/${caseId}/conversations`);
+}
+
+/* 获取对话消息列表 */
+export async function getMessages(conversationId: number): Promise<ConversationMessageItem[]> {
+  return fetchAPI<ConversationMessageItem[]>(`/api/conversations/${conversationId}/messages`);
+}
+
+/* ─────── V4: 可观测面板 API ─────── */
+
+export interface ObservabilitySummary {
+  today_analysis_count: number;
+  today_change_pct: number;
+  avg_latency_ms: number;
+  llm_success_rate: number;
+  total_agent_runs: number;
+  degradation_count: number;
+  days: number;
+}
+
+export interface LatencyTrendResponse {
+  trend: Array<{ date: string; avg_latency_ms: number; count: number }>;
+  days: number;
+}
+
+export interface AgentLatencyResponse {
+  agents: Array<{ agent_name: string; avg_latency_ms: number; count: number }>;
+  days: number;
+}
+
+export interface WorkflowStatusResponse {
+  statuses: Array<{ status: string; count: number; percentage: number }>;
+  total: number;
+  days: number;
+}
+
+/* 获取可观测概览指标 */
+export async function getObservabilitySummary(days: number = 7): Promise<ObservabilitySummary> {
+  return fetchAPI<ObservabilitySummary>(`/api/observability/summary?days=${days}`);
+}
+
+/* 获取响应时间趋势 */
+export async function getLatencyTrend(days: number = 7): Promise<LatencyTrendResponse> {
+  return fetchAPI<LatencyTrendResponse>(`/api/observability/latency-trend?days=${days}`);
+}
+
+/* 获取各 Agent 平均耗时 */
+export async function getAgentLatency(days: number = 7): Promise<AgentLatencyResponse> {
+  return fetchAPI<AgentLatencyResponse>(`/api/observability/agent-latency?days=${days}`);
+}
+
+/* 获取工作流状态分布 */
+export async function getWorkflowStatusDist(days: number = 7): Promise<WorkflowStatusResponse> {
+  return fetchAPI<WorkflowStatusResponse>(`/api/observability/workflow-status?days=${days}`);
 }

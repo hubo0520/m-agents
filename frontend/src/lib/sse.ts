@@ -194,3 +194,143 @@ export function analyzeCaseStream(
 
   return controller;
 }
+
+/* ═══════════ 对话式分析 SSE ═══════════ */
+
+/** 对话 SSE 事件回调 */
+export interface ChatStreamCallbacks {
+  onChunk?: (data: { content: string }) => void;
+  onDone?: (data: { content: string; elapsed_ms: number }) => void;
+  onError?: (data: { error: string }) => void;
+}
+
+/**
+ * 发起对话流式请求
+ *
+ * @param conversationId 对话 ID
+ * @param message 用户消息
+ * @param callbacks 事件回调
+ * @returns AbortController
+ */
+export function chatStream(
+  conversationId: number,
+  message: string,
+  callbacks: ChatStreamCallbacks
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const token = getAccessToken();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      let res = await fetch(
+        `${API_BASE}/api/conversations/${conversationId}/chat/stream`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ message }),
+          signal: controller.signal,
+        }
+      );
+
+      // 处理 401 Token 过期
+      if (res.status === 401 && token) {
+        const newToken = await tryRefreshToken();
+        if (newToken) {
+          headers["Authorization"] = `Bearer ${newToken}`;
+          res = await fetch(
+            `${API_BASE}/api/conversations/${conversationId}/chat/stream`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ message }),
+              signal: controller.signal,
+            }
+          );
+        } else {
+          clearTokens();
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+          callbacks.onError?.({ error: "认证已过期，请重新登录" });
+          return;
+        }
+      }
+
+      if (!res.ok) {
+        const text = await res.text();
+        callbacks.onError?.({ error: `对话请求失败: ${res.status} ${text}` });
+        return;
+      }
+
+      // 解析 SSE 流
+      const reader = res.body?.getReader();
+      if (!reader) {
+        callbacks.onError?.({ error: "无法读取响应流" });
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const eventBlock of events) {
+          if (!eventBlock.trim()) continue;
+          if (eventBlock.trim().startsWith(":")) continue;
+
+          let eventType = "";
+          let dataStr = "";
+
+          for (const line of eventBlock.split("\n")) {
+            if (line.startsWith("event:")) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              dataStr += line.slice(5).trim();
+            }
+          }
+
+          if (!eventType || !dataStr) continue;
+
+          try {
+            const data = JSON.parse(dataStr);
+
+            switch (eventType) {
+              case "chat_chunk":
+                callbacks.onChunk?.(data);
+                break;
+              case "chat_done":
+                callbacks.onDone?.(data);
+                return;
+              case "chat_error":
+                callbacks.onError?.(data);
+                return;
+            }
+          } catch (parseErr) {
+            console.warn("Chat SSE 事件解析失败:", parseErr, dataStr);
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      callbacks.onError?.({ error: `Chat SSE 连接失败: ${String(err)}` });
+    }
+  })();
+
+  return controller;
+}
