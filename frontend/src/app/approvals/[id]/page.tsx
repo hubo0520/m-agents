@@ -94,7 +94,7 @@ function PayloadCard({ raw }: { raw: string | null | undefined }) {
       {benefit && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
           <p className="text-xs text-green-600 font-medium mb-2">预期收益</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {benefit.cash_relief != null && (
               <div>
                 <p className="text-gray-500 text-xs">资金缓解</p>
@@ -217,8 +217,8 @@ export default function ApprovalDetailPage() {
         ← 返回审批列表
       </button>
 
-      <div className="flex items-center gap-3 mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">审批详情 #{task.id}</h1>
+      <div className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-8 flex-wrap">
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">审批详情 #{task.id}</h1>
         <Badge variant={task.status === "APPROVED" ? "success" : task.status === "REJECTED" ? "danger" : "warning"} size="md" dot>
           {getApprovalStatusLabel(task.status)}
         </Badge>
@@ -226,7 +226,7 @@ export default function ApprovalDetailPage() {
 
       {/* 基本信息 */}
       <Card className="mb-6">
-        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div><span className="text-slate-500">审批类型：</span>
             <Badge variant="info" size="sm" className="ml-1">{getApprovalTypeLabel(task.approval_type)}</Badge>
           </div>

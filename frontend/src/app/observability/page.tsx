@@ -158,9 +158,9 @@ export default function ObservabilityPage() {
   return (
     <div className="animate-fade-in">
       {/* 页面标题 + 时间范围选择器 */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">📊 Agent 可观测面板</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-slate-800">📊 Agent 可观测面板</h1>
           <p className="text-sm text-slate-400 mt-0.5">监控 Agent 运行状态与性能趋势</p>
         </div>
         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
@@ -182,7 +182,7 @@ export default function ObservabilityPage() {
 
       {/* 指标卡 */}
       {summary && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <MetricCard
             title="今日分析量"
             value={summary.today_analysis_count}
@@ -210,7 +210,7 @@ export default function ObservabilityPage() {
       )}
 
       {/* 图表区域 */}
-      <div className="grid grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* 响应时间趋势折线图 */}
         <Card>
           <CardTitle className="mb-4">响应时间趋势</CardTitle>

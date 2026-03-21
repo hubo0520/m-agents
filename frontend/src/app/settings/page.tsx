@@ -54,13 +54,13 @@ export default function SettingsPage() {
       />
 
       {/* Tab 栏 — Segment Control 风格 */}
-      <div className="mb-8">
-        <div className="inline-flex bg-slate-100 rounded-lg p-1 gap-0.5">
+      <div className="mb-6 sm:mb-8">
+        <div className="inline-flex bg-slate-100 rounded-lg p-1 gap-0.5 max-w-full overflow-x-auto">
           {TABS.map((tab, i) => (
             <button
               key={tab}
               onClick={() => setActiveTab(i)}
-              className={`px-4 py-2 text-xs font-medium rounded-md transition-all duration-200 ${
+              className={`px-3 sm:px-4 py-2 text-xs font-medium rounded-md transition-all duration-200 whitespace-nowrap ${
                 activeTab === i
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
@@ -91,6 +91,7 @@ export default function SettingsPage() {
           </Card>
 
           <Card padding="none" className="overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
@@ -121,6 +122,7 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
 
           {selectedAgent && (
@@ -159,6 +161,7 @@ export default function SettingsPage() {
           <div className="px-5 py-4 border-b border-slate-100">
             <h3 className="text-sm font-semibold text-slate-800">Agent 模型配置</h3>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100">
@@ -179,6 +182,7 @@ export default function SettingsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 

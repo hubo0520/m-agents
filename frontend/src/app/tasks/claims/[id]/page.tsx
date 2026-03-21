@@ -72,7 +72,7 @@ export default function ClaimDetailPage() {
 
       {/* 状态条 */}
       <Card className="mb-6">
-        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-xl font-semibold text-slate-800">🛡️ 理赔申请草稿</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -85,7 +85,7 @@ export default function ClaimDetailPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* 理赔信息 */}
         <Card>
           <CardTitle className="mb-4">💵 理赔信息</CardTitle>
@@ -146,7 +146,7 @@ export default function ClaimDetailPage() {
         </Card>
 
         {/* 证据列表 */}
-        <Card className="col-span-2">
+        <Card className="md:col-span-2">
           <CardTitle className="mb-4">📎 关联证据</CardTitle>
           {task.evidence_snapshot && Array.isArray(task.evidence_snapshot) && task.evidence_snapshot.length > 0 ? (
             <div className="space-y-2">

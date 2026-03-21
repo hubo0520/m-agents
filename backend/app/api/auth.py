@@ -20,7 +20,7 @@ from app.core.error_codes import (
 )
 from app.models.models import User
 from app.schemas.auth_schemas import (
-    SetupRequest, RegisterRequest, LoginRequest, RefreshRequest,
+    SetupRequest, RegisterRequest, PublicRegisterRequest, LoginRequest, RefreshRequest,
     ChangePasswordRequest, TokenResponse, UserResponse, MessageResponse,
 )
 
@@ -106,6 +106,34 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
 
     logger.info("管理员创建新用户: %s (角色: %s)", user.username, user.role)
     return _user_to_response(user)
+
+
+# ─────── 公开注册 ───────
+
+@router.post("/public-register", response_model=TokenResponse, status_code=201)
+def public_register(req: PublicRegisterRequest, db: Session = Depends(get_db)):
+    """
+    公开注册：任何人都可调用，创建默认角色（risk_ops）的普通用户。
+    注册成功后直接返回 Token（自动登录）。
+    """
+    # 用户名唯一性检查
+    if db.query(User).filter(User.username == req.username).first():
+        raise AuthException("用户名已存在", status_code=409)
+
+    user = User(
+        username=req.username,
+        display_name=req.display_name,
+        password_hash=hash_password(req.password),
+        role=Role.RISK_OPS.value,
+        is_active=True,
+        is_superadmin=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    logger.info("公开注册新用户: %s (角色: %s)", user.username, user.role)
+    return _create_tokens(user)
 
 
 # ─────── 登录 ───────

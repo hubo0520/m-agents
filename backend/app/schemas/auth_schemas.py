@@ -21,6 +21,13 @@ class RegisterRequest(BaseModel):
     role: str = Field(..., description="角色：admin / risk_ops / finance_ops / claim_ops / compliance")
 
 
+class PublicRegisterRequest(BaseModel):
+    """公开注册请求（无需管理员权限）"""
+    username: str = Field(..., min_length=2, max_length=64)
+    display_name: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., min_length=6, max_length=128)
+
+
 class LoginRequest(BaseModel):
     """登录请求"""
     username: str

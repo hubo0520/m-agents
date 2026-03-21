@@ -13,7 +13,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && pathname !== "/login") {
+    if (!isLoading && !isAuthenticated && pathname !== "/login" && pathname !== "/register") {
       router.replace("/login");
     }
   }, [isLoading, isAuthenticated, pathname, router]);

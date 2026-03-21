@@ -124,7 +124,7 @@ export default function DashboardPage() {
       />
 
       {/* ── 顶部指标卡 ── */}
-      <div className="grid grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
         <StatCard
           label="监控商家数"
           value={stats?.merchant_count?.toString() ?? "-"}
@@ -163,7 +163,7 @@ export default function DashboardPage() {
 
       {/* ── 快捷面板 ── */}
       {(pendingApprovals.length > 0 || failedWorkflows.length > 0) && (
-        <div className="grid grid-cols-2 gap-5 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
           {pendingApprovals.length > 0 && (
             <Card padding="none">
               <CardHeader className="px-5 pt-4 pb-0">
@@ -239,11 +239,11 @@ export default function DashboardPage() {
 
       {/* ── 筛选区 ── */}
       <Card className="mb-6" padding="none">
-        <div className="px-5 py-4 flex gap-5 flex-wrap items-end">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 flex flex-col sm:flex-row gap-3 sm:gap-5 flex-wrap items-stretch sm:items-end">
           <div>
             <label className="text-xs font-medium text-slate-500 block mb-1.5">风险等级</label>
             <select
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[120px] hover:border-slate-300"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:min-w-[120px] hover:border-slate-300"
               value={riskLevel}
               onChange={(e) => { setRiskLevel(e.target.value); setPage(1); }}
             >
@@ -256,7 +256,7 @@ export default function DashboardPage() {
           <div>
             <label className="text-xs font-medium text-slate-500 block mb-1.5">案件状态</label>
             <select
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[120px] hover:border-slate-300"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:min-w-[120px] hover:border-slate-300"
               value={status}
               onChange={(e) => { setStatus(e.target.value); setPage(1); }}
             >
@@ -271,7 +271,7 @@ export default function DashboardPage() {
           <div>
             <label className="text-xs font-medium text-slate-500 block mb-1.5">商家名称</label>
             <input
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[160px] hover:border-slate-300 placeholder:text-slate-300"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:min-w-[160px] hover:border-slate-300 placeholder:text-slate-300"
               placeholder="搜索商家..."
               value={merchantName}
               onChange={(e) => { setMerchantName(e.target.value); setPage(1); }}
@@ -280,7 +280,7 @@ export default function DashboardPage() {
           <div>
             <label className="text-xs font-medium text-slate-500 block mb-1.5">排序</label>
             <select
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[120px] hover:border-slate-300"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:min-w-[120px] hover:border-slate-300"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
             >

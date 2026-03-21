@@ -127,11 +127,11 @@ export default function TasksPage() {
         title="任务管理"
         description={`共 ${tasks.length} 条任务`}
         actions={
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[120px] hover:border-slate-300"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:min-w-[120px] hover:border-slate-300"
             >
               <option value="">全部类型</option>
               <option value="financing">💰 融资申请</option>
@@ -143,14 +143,14 @@ export default function TasksPage() {
               value={filterAssignee}
               onChange={(e) => setFilterAssignee(e.target.value)}
               placeholder="按负责人筛选..."
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-40 hover:border-slate-300 placeholder:text-slate-300"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:w-40 hover:border-slate-300 placeholder:text-slate-300"
             />
           </div>
         }
       />
 
       {/* 看板 */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {groupedTasks.map((group) => (
           <div key={group.key} className={`rounded-xl border ${group.color} bg-slate-50/50 min-h-[400px]`}>
             <div className={`px-4 py-3 rounded-t-xl ${group.headerBg} flex items-center justify-between`}>

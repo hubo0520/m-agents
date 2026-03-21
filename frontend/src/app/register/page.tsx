@@ -5,33 +5,17 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading, login, setup } = useAuth();
-
-  // 系统初始化状态
-  const [initialized, setInitialized] = useState<boolean | null>(null);
-  const [isSetupMode, setIsSetupMode] = useState(false);
+  const { isAuthenticated, isLoading, register } = useAuth();
 
   // 表单状态
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  // 检查系统是否已初始化
-  useEffect(() => {
-    fetch(`${API_BASE}/api/auth/check-init`)
-      .then((r) => r.json())
-      .then((data) => {
-        setInitialized(data.initialized);
-        if (!data.initialized) setIsSetupMode(true);
-      })
-      .catch(() => setInitialized(true));
-  }, []);
 
   // 已登录 → 跳转首页
   useEffect(() => {
@@ -40,39 +24,32 @@ export default function LoginPage() {
     }
   }, [isLoading, isAuthenticated, router]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setSubmitting(true);
-    try {
-      await login(username, password);
-      router.replace("/");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "登录失败");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
-  const handleSetup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+    // 客户端验证
     if (password.length < 6) {
       setError("密码至少 6 位");
       return;
     }
+    if (password !== confirmPassword) {
+      setError("两次密码输入不一致");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await setup(username, displayName, password);
+      await register(username, displayName, password);
       router.replace("/");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "初始化失败");
+      setError(err instanceof Error ? err.message : "注册失败");
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (isLoading || initialized === null) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -81,8 +58,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-      <div className="w-full max-w-[400px] mx-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/30 px-4">
+      <div className="w-full max-w-[400px]">
         {/* 品牌区 */}
         <div className="text-center mb-8">
           <div className="inline-flex w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 items-center justify-center shadow-lg shadow-blue-500/20 mb-4">
@@ -91,16 +68,12 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="text-xl font-bold text-slate-800">商家经营保障 Agent</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {isSetupMode ? "首次使用，请创建管理员账号" : "登录以继续操作"}
-          </p>
+          <p className="text-sm text-slate-400 mt-1">创建账号，快速体验系统功能</p>
         </div>
 
         {/* 卡片 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-8">
-          <h2 className="text-base font-semibold text-slate-800 mb-6">
-            {isSetupMode ? "系统初始化" : "账号登录"}
-          </h2>
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 sm:p-8">
+          <h2 className="text-base font-semibold text-slate-800 mb-6">注册新账号</h2>
 
           {error && (
             <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">
@@ -108,7 +81,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={isSetupMode ? handleSetup : handleLogin} className="space-y-4">
+          <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">用户名</label>
               <input
@@ -118,24 +91,26 @@ export default function LoginPage() {
                 required
                 autoFocus
                 autoComplete="username"
-                placeholder="请输入用户名"
+                minLength={2}
+                maxLength={64}
+                placeholder="2-64 位字符"
                 className="w-full px-3 py-2.5 text-base border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-slate-300"
               />
             </div>
 
-            {isSetupMode && (
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">显示名称</label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  required
-                  placeholder="用于前端展示的名称"
-                  className="w-full px-3 py-2.5 text-base border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-slate-300"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">显示名称</label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                required
+                minLength={1}
+                maxLength={128}
+                placeholder="用于前端展示的名称"
+                className="w-full px-3 py-2.5 text-base border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-slate-300"
+              />
+            </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">密码</label>
@@ -144,8 +119,23 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete={isSetupMode ? "new-password" : "current-password"}
-                placeholder={isSetupMode ? "至少 6 位字符" : "请输入密码"}
+                autoComplete="new-password"
+                minLength={6}
+                maxLength={128}
+                placeholder="至少 6 位字符"
+                className="w-full px-3 py-2.5 text-base border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-slate-300"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">确认密码</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+                placeholder="请再次输入密码"
                 className="w-full px-3 py-2.5 text-base border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-slate-300"
               />
             </div>
@@ -158,23 +148,20 @@ export default function LoginPage() {
               {submitting ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {isSetupMode ? "创建中..." : "登录中..."}
+                  注册中...
                 </span>
               ) : (
-                isSetupMode ? "创建管理员并进入系统" : "登 录"
+                "注册并进入系统"
               )}
             </button>
           </form>
 
-          {/* 初始化模式下不显示切换按钮 */}
-          {initialized && !isSetupMode && (
-            <p className="text-xs text-slate-400 text-center mt-4">
-              没有账号？
-              <Link href="/register" className="text-blue-500 hover:text-blue-600 ml-1">
-                立即注册
-              </Link>
-            </p>
-          )}
+          <p className="text-xs text-slate-400 text-center mt-4">
+            已有账号？
+            <Link href="/login" className="text-blue-500 hover:text-blue-600 ml-1">
+              去登录
+            </Link>
+          </p>
         </div>
       </div>
     </div>

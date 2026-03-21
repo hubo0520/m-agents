@@ -88,6 +88,7 @@ export function UserManagementTab() {
       </div>
 
       <Card padding="none" className="overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100">
@@ -166,6 +167,7 @@ export function UserManagementTab() {
             )}
           </tbody>
         </table>
+        </div>
       </Card>
 
       {/* 新建用户弹窗 */}

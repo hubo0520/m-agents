@@ -263,7 +263,7 @@ export default function EvalRunDetailPage() {
                   })()}
 
                   {/* Expected vs Actual 对比 */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">期望输出</h4>
                       <div className="bg-slate-50 rounded-lg p-3 text-xs font-mono overflow-auto max-h-64">

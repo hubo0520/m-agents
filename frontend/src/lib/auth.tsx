@@ -23,6 +23,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   setup: (username: string, displayName: string, password: string) => Promise<void>;
+  register: (username: string, displayName: string, password: string) => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -168,6 +169,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   };
 
+  const register = async (username: string, displayName: string, password: string) => {
+    const res = await fetch(`${API_BASE}/api/auth/public-register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, display_name: displayName, password }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.detail || "注册失败");
+    }
+
+    const data = await res.json();
+    setTokens(data.access_token, data.refresh_token);
+    setUser(data.user);
+  };
+
   const logout = () => {
     clearTokens();
     setUser(null);
@@ -186,6 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         setup,
+        register,
         refreshUser,
       }}
     >

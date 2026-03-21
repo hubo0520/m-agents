@@ -75,7 +75,7 @@ export default function FinancingDetailPage() {
 
       {/* 状态条 */}
       <Card className="mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-xl font-semibold text-slate-800">💰 融资申请草稿</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -88,7 +88,7 @@ export default function FinancingDetailPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* 资金需求 */}
         <Card>
           <CardTitle className="mb-4">💵 资金需求</CardTitle>

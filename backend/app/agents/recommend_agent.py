@@ -167,6 +167,12 @@ from loguru import logger
 
 DEFAULT_RECOMMENDATION_PROMPT = """你是一个电商平台资深风险运营策略专家 Agent。你的任务是根据商家画像、经营指标、现金流预测和证据，生成精准可执行的保障动作建议。
 
+## 语言要求（最高优先级）
+- ⚠️ **title 字段必须使用中文**，格式为「动词+具体动作」，例如「启动商品履约质量专项核查」「发起回款异常工单」
+- ⚠️ **why 字段必须使用中文**，引用具体数值
+- ⚠️ **expected_benefit.description 必须使用中文**
+- ❌ 禁止在 title、why、description 中使用英文标题或英文句子
+
 ## 推理框架（请按以下步骤逐步思考）
 
 **第 1 步 — 评估风险等级**：基于指标综合判断 risk_level (high/medium/low)。
@@ -174,11 +180,21 @@ DEFAULT_RECOMMENDATION_PROMPT = """你是一个电商平台资深风险运营策
 - medium: return_amplification ≥ 1.3 或 avg_settlement_delay ≥ 2
 - low: 其他
 
-**第 2 步 — 匹配可用动作**：逐一评估以下动作类型的适用条件：
-- **advance_settlement** (回款加速): 适用条件 = avg_settlement_delay ≥ 2 或 (predicted_gap > 0 且 delay ≥ 1)。预期效果：缩短回款周期 T+1~T+3 到账。
-- **business_loan** (经营贷): 适用条件 = 经营天数 ≥ 60 且 store_level 为 gold/silver 且 anomaly_score < 0.5 且 (predicted_gap ≥ 5000 或 refund_pressure_7d ≥ 10000)。⚠️ 必须设置 requires_manual_review=true。
-- **insurance_adjust** (运费险调整): 适用条件 = return_amplification ≥ 1.3 且 return_rate_7d ≥ 0.15。
-- **anomaly_review** (异常退货人工复核): 适用条件 = anomaly_score ≥ 0.3。⚠️ 必须设置 requires_manual_review=true。
+**第 2 步 — 匹配可用动作**：逐一评估以下动作类型的适用条件（action_type 使用英文标识符，title 使用中文）：
+
+| action_type | 中文名称 | 适用条件 | 备注 |
+|---|---|---|---|
+| advance_settlement | 回款加速 | avg_settlement_delay ≥ 2 或 (predicted_gap > 0 且 delay ≥ 1) | 缩短回款周期 |
+| business_loan | 经营贷 | 经营天数 ≥ 60 且 store_level 为 gold/silver 且 anomaly_score < 0.5 | ⚠️ requires_manual_review=true |
+| insurance_adjust | 运费险调整 | return_amplification ≥ 1.3 且 return_rate_7d ≥ 0.15 | 优化保费成本 |
+| anomaly_review | 异常退货复核 | anomaly_score ≥ 0.3 | ⚠️ requires_manual_review=true |
+| quality_review | 商品质量核查 | 退货原因集中在质量/描述不符/假冒 | 下架复核、合规审查 |
+| settlement_followup | 回款异常跟进 | 存在多笔回款延迟超过行业均值 | 生成工单跟进 |
+| merchant_communication | 商家沟通 | 需要通知商家经营风险或改进建议 | 发送预警通知 |
+| fraud_review | 反欺诈复核 | 存在明显欺诈信号 | ⚠️ requires_manual_review=true |
+| risk_monitoring | 风险监控 | 需要持续关注但暂不干预 | 加入监控名单 |
+| manual_handoff | 人工接管 | 系统无法自动处理的复杂情况 | ⚠️ requires_manual_review=true |
+| claim_submission | 理赔提交 | 存在可索赔的保险损失 | 生成理赔材料 |
 
 **第 3 步 — 构建建议**：为每个满足条件的动作生成建议，why 字段必须引用具体数值，confidence 基于证据充分度。
 
@@ -200,13 +216,46 @@ DEFAULT_RECOMMENDATION_PROMPT = """你是一个电商平台资深风险运营策
 ```
 
 ## 安全约束（严格遵守）
-- ❌ 不要推荐未在上述 4 种 action_type 中的动作类型
-- ❌ 融资类 (business_loan) 和反欺诈类 (anomaly_review) 必须设置 requires_manual_review=true
+- ❌ action_type 必须从上表中选择，不要自创新的 action_type
+- ❌ 融资类 (business_loan)、反欺诈类 (anomaly_review, fraud_review) 和人工接管 (manual_handoff) 必须设置 requires_manual_review=true
 - ❌ 不要编造不存在的 evidence_id
 - ❌ expected_benefit 中不要使用"保证"、"100%"等绝对化表述
 - ❌ confidence 不要高于 0.95
+- ❌ title 和 why 必须使用中文，禁止英文标题
 
 请严格按照输出 Schema 返回结构化 JSON。"""
+
+
+# 允许的 action_type 白名单
+VALID_ACTION_TYPES = {
+    "advance_settlement", "business_loan", "insurance_adjust", "anomaly_review",
+    "quality_review", "settlement_followup", "merchant_communication",
+    "fraud_review", "risk_monitoring", "manual_handoff", "claim_submission",
+}
+
+# 常见 LLM 自创 action_type → 标准 action_type 的映射
+_ACTION_TYPE_ALIAS = {
+    "quality_intervention": "quality_review",
+    "quality_check": "quality_review",
+    "product_review": "quality_review",
+    "settlement_follow_up": "settlement_followup",
+    "payment_followup": "settlement_followup",
+    "repayment_acceleration": "advance_settlement",
+    "merchant_notification": "merchant_communication",
+    "merchant_warning": "merchant_communication",
+    "insurance_claim": "claim_submission",
+}
+
+
+def _normalize_action_type(action_type: str) -> str:
+    """将 LLM 可能生成的非标准 action_type 规范化为已知类型"""
+    if action_type in VALID_ACTION_TYPES:
+        return action_type
+    # 尝试别名映射
+    if action_type in _ACTION_TYPE_ALIAS:
+        return _ACTION_TYPE_ALIAS[action_type]
+    # 兜底：保持原值（前端会 fallback 显示原始值）
+    return action_type
 
 
 def _run_recommendations_llm(
@@ -304,8 +353,10 @@ def _run_recommendations_llm(
 
         # 后处理：强制校验安全约束
         for rec in result.recommendations:
-            if rec.action_type in ("business_loan", "anomaly_review", "fraud_review"):
+            if rec.action_type in ("business_loan", "anomaly_review", "fraud_review", "manual_handoff"):
                 rec.requires_manual_review = True
+            # 规范化未知 action_type：映射到最接近的已知类型
+            rec.action_type = _normalize_action_type(rec.action_type)
 
         logger.info(
             "案件 %s LLM 建议生成完成 | risk_level=%s | 建议数=%d",

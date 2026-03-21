@@ -219,14 +219,21 @@ const RULE_NAME_MAP: Record<string, string> = {
 
 // ─────────── action_type 中文映射 ───────────
 export const ACTION_TYPE_MAP: Record<string, { label: string; color: string }> = {
-  advance_settlement:  { label: "回款加速",   color: "bg-cyan-100 text-cyan-700" },
-  business_loan:       { label: "经营贷",     color: "bg-green-100 text-green-700" },
-  insurance_adjust:    { label: "保险调整",   color: "bg-indigo-100 text-indigo-700" },
-  anomaly_review:      { label: "异常复核",   color: "bg-orange-100 text-orange-700" },
-  fraud_review:        { label: "反欺诈复核", color: "bg-red-100 text-red-700" },
-  manual_handoff:      { label: "人工接管",   color: "bg-purple-100 text-purple-700" },
-  claim_submission:    { label: "理赔提交",   color: "bg-amber-100 text-amber-700" },
-  risk_monitoring:     { label: "风险监控",   color: "bg-blue-100 text-blue-700" },
+  advance_settlement:     { label: "回款加速",       color: "bg-cyan-100 text-cyan-700" },
+  business_loan:          { label: "经营贷",         color: "bg-green-100 text-green-700" },
+  insurance_adjust:       { label: "保险调整",       color: "bg-indigo-100 text-indigo-700" },
+  anomaly_review:         { label: "异常复核",       color: "bg-orange-100 text-orange-700" },
+  fraud_review:           { label: "反欺诈复核",     color: "bg-red-100 text-red-700" },
+  manual_handoff:         { label: "人工接管",       color: "bg-purple-100 text-purple-700" },
+  claim_submission:       { label: "理赔提交",       color: "bg-amber-100 text-amber-700" },
+  risk_monitoring:        { label: "风险监控",       color: "bg-blue-100 text-blue-700" },
+  quality_review:         { label: "商品质量核查",   color: "bg-rose-100 text-rose-700" },
+  quality_intervention:   { label: "商品质量核查",   color: "bg-rose-100 text-rose-700" },
+  settlement_followup:    { label: "回款异常跟进",   color: "bg-teal-100 text-teal-700" },
+  settlement_follow_up:   { label: "回款异常跟进",   color: "bg-teal-100 text-teal-700" },
+  merchant_communication: { label: "商家沟通",       color: "bg-sky-100 text-sky-700" },
+  merchant_notification:  { label: "商家沟通",       color: "bg-sky-100 text-sky-700" },
+  repayment_acceleration: { label: "回款加速",       color: "bg-cyan-100 text-cyan-700" },
 };
 
 export function getActionTypeLabel(type: string): string {
@@ -305,6 +312,13 @@ const LABEL_TEXT_MAP: Record<string, string> = {
   manual_handoff:         "人工接管",
   risk_monitoring:        "风险监控",
   claim_submission:       "理赔提交",
+  quality_review:         "商品质量核查",
+  quality_intervention:   "商品质量核查",
+  settlement_followup:    "回款异常跟进",
+  settlement_follow_up:   "回款异常跟进",
+  merchant_communication: "商家沟通",
+  merchant_notification:  "商家通知",
+  repayment_acceleration: "回款加速",
   // 其他英文术语
   manual_review_required: "需人工复核",
   requires_manual_review: "需人工复核",

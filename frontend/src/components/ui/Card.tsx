@@ -17,7 +17,7 @@ const paddingStyles = {
 export function Card({ children, className = "", padding = "md", hover = false }: CardProps) {
   return (
     <div
-      className={`bg-white rounded-xl border border-slate-200/80 shadow-xs ${paddingStyles[padding]} ${hover ? "card-hover cursor-pointer" : ""} ${className}`}
+      className={`bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden min-w-0 ${paddingStyles[padding]} ${hover ? "card-hover cursor-pointer" : ""} ${className}`}
     >
       {children}
     </div>

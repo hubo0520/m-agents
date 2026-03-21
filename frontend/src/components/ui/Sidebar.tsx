@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
@@ -82,14 +82,35 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // 路由变化时关闭移动端菜单
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // ESC 关闭
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    if (mobileOpen) {
+      document.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
   };
 
-  return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex flex-col bg-white border-r border-slate-200/80 w-[var(--sidebar-width)]">
+  const sidebarContent = (
+    <>
       {/* 品牌区 */}
       <div className="flex items-center gap-3 px-5 h-[60px] border-b border-slate-100">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
@@ -101,6 +122,16 @@ export function Sidebar() {
           <span className="text-sm font-semibold text-slate-800 leading-tight">商家经营保障</span>
           <span className="text-[10px] text-slate-400 font-medium">Agent V3</span>
         </div>
+        {/* 移动端关闭按钮 */}
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="ml-auto md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          aria-label="关闭菜单"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       {/* 导航区 */}
@@ -128,7 +159,42 @@ export function Sidebar() {
 
       {/* 底部用户区域 */}
       <UserFooter />
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* 移动端汉堡菜单按钮 */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="fixed top-3 left-3 z-40 md:hidden p-2 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+        aria-label="打开菜单"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        </svg>
+      </button>
+
+      {/* 桌面端：固定侧边栏 */}
+      <aside className="hidden md:flex fixed inset-y-0 left-0 z-30 flex-col bg-white border-r border-slate-200/80 w-[var(--sidebar-width)]">
+        {sidebarContent}
+      </aside>
+
+      {/* 移动端：Drawer 覆盖层 */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          {/* 遮罩层 */}
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-[1px]"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* 抽屉 */}
+          <aside className="absolute inset-y-0 left-0 flex flex-col bg-white w-[280px] shadow-xl animate-slide-in-left">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
 

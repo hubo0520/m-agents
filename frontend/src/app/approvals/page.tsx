@@ -114,9 +114,9 @@ export default function ApprovalsPage() {
 
       {/* 筛选栏 */}
       <Card className="mb-6" padding="none">
-        <div className="px-5 py-4 flex gap-4">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 flex flex-col sm:flex-row gap-3 sm:gap-4 flex-wrap">
           <select
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[120px] hover:border-slate-300"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:min-w-[120px] hover:border-slate-300"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -127,7 +127,7 @@ export default function ApprovalsPage() {
             <option value="OVERDUE">已超时</option>
           </select>
           <select
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[120px] hover:border-slate-300"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white w-full sm:min-w-[120px] hover:border-slate-300"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >

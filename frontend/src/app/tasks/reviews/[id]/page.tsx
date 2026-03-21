@@ -88,7 +88,7 @@ export default function ReviewDetailPage() {
 
       {/* 状态条 */}
       <Card className="mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-xl font-semibold text-slate-800">👁️ 人工复核任务</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -110,7 +110,7 @@ export default function ReviewDetailPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* 复核信息 */}
         <Card>
           <CardTitle className="mb-4">📋 复核信息</CardTitle>
@@ -156,7 +156,7 @@ export default function ReviewDetailPage() {
 
         {/* 复核结果（如果已完成） */}
         {task.review_result && (
-          <Card className="col-span-2">
+          <Card className="md:col-span-2">
             <CardTitle className="mb-4">✅ 复核结果</CardTitle>
             <p className="text-sm text-slate-800 bg-green-50 rounded-lg p-3">
               {task.review_result}

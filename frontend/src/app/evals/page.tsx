@@ -139,9 +139,9 @@ export default function EvalsPage() {
 
       {/* 评测数据集 */}
       <div className="mb-10">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
           <h2 className="text-base font-semibold text-slate-800">评测数据集</h2>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -237,6 +237,7 @@ export default function EvalsPage() {
           {datasets.length === 0 ? (
             <EmptyState title="暂无评测数据集" description="点击上方按钮创建数据集或从案件导入" />
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
@@ -302,6 +303,7 @@ export default function EvalsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
       </div>

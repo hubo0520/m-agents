@@ -53,8 +53,8 @@ export default function WorkflowDetailPage() {
         ← 返回工作流列表
       </button>
 
-      <div className="flex items-center gap-3 mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">工作流详情 #{run.id}</h1>
+      <div className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-8 flex-wrap">
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">工作流详情 #{run.id}</h1>
         <Badge variant={run.status === "COMPLETED" ? "success" : ["FAILED_RETRYABLE", "FAILED_FINAL"].includes(run.status) ? "danger" : "warning"} size="md" dot>
           {getCaseStatusLabel(run.status)}
         </Badge>
@@ -62,7 +62,7 @@ export default function WorkflowDetailPage() {
 
       {/* 基本信息 */}
       <Card className="mb-6">
-        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div><span className="text-gray-500">案件 ID：</span>#{run.case_id}</div>
           <div><span className="text-gray-500">Graph 版本：</span>{run.graph_version}</div>
           <div><span className="text-slate-500">当前节点：</span>

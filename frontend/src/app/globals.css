@@ -165,6 +165,11 @@ input:focus, select:focus, textarea:focus {
   to { transform: translateX(0); }
 }
 
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
 @keyframes slideOutRight {
   from { transform: translateX(0); }
   to { transform: translateX(100%); }
@@ -181,6 +186,10 @@ input:focus, select:focus, textarea:focus {
 
 .animate-slide-in-right {
   animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .animate-fade-in-overlay {

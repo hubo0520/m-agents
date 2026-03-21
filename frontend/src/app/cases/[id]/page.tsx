@@ -118,7 +118,7 @@ function ReviewDrawer({
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/20 animate-fade-in-overlay" onClick={onClose} />
-      <div className="w-[480px] bg-white shadow-xl overflow-y-auto p-6 animate-slide-in-right">
+        <div className="w-full sm:w-[480px] bg-white shadow-xl overflow-y-auto p-4 sm:p-6 animate-slide-in-right">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-bold">审批案件</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
@@ -571,8 +571,8 @@ export default function CaseDetailPage() {
   return (
     <div className="animate-fade-in">
       {/* 面包屑导航 + 操作按钮 */}
-      <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <button
             className="text-sm text-slate-500 hover:text-blue-600 transition-colors"
             onClick={() => router.push("/")}
@@ -584,7 +584,7 @@ export default function CaseDetailPage() {
           <RiskBadge level={data.risk_level} />
           <StatusBadge status={data.status} />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             className="px-3.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-40"
             onClick={handleAnalyze}
@@ -621,13 +621,13 @@ export default function CaseDetailPage() {
       </div>
 
       {/* 左右分栏 */}
-      <div className="grid grid-cols-5 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-8">
         {/* 左侧 — 60% */}
-        <div className="col-span-3 space-y-5">
+        <div className="lg:col-span-3 space-y-5">
           {/* 商家基本信息 */}
           <Card>
             <CardTitle className="mb-4">商家信息</CardTitle>
-            <div className="grid grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-slate-400">名称</span>
                 <p className="font-medium">{data.merchant.name}</p>
@@ -651,7 +651,7 @@ export default function CaseDetailPage() {
           {data.metrics && (
             <Card>
               <CardTitle className="mb-4">风险评分拆解</CardTitle>
-              <div className="grid grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div className="text-center p-3 bg-slate-50/80 rounded-lg">
                   <p className="text-xs text-slate-400 mb-1">退货率放大</p>
                   <p className="text-xl font-bold text-orange-600">
@@ -746,7 +746,7 @@ export default function CaseDetailPage() {
         </div>
 
         {/* 右侧 — 40% */}
-        <div className="col-span-2 space-y-5">
+        <div className="lg:col-span-2 space-y-5">
           {/* 分析工作流面板：分析中时显示 */}
           {showWorkflow && (
             <Card>
@@ -919,6 +919,7 @@ export default function CaseDetailPage() {
               收起
             </button>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100">
@@ -962,6 +963,7 @@ export default function CaseDetailPage() {
               })}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 
