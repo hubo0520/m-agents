@@ -11,7 +11,7 @@ import type {
 } from "@/types";
 import { authFetch } from "./api-client";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
   return authFetch<T>(path, options);

@@ -5,7 +5,7 @@
  */
 import { getAccessToken, tryRefreshToken, clearTokens } from "./auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 /** 分析进度事件 */
 export interface AnalysisProgressEvent {

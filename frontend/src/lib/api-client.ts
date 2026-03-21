@@ -5,7 +5,7 @@
 import { getAccessToken, clearTokens, tryRefreshToken } from "./auth";
 import { toast } from "sonner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 /**
  * 带认证的 API 请求工具函数

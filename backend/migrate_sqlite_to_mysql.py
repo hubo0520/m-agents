@@ -13,7 +13,8 @@ from sqlalchemy import create_engine, MetaData, text, inspect
 
 # ── 配置 ──────────────────────────────────────────────
 SQLITE_PATH = os.path.join(os.path.dirname(__file__), "data.db")
-MYSQL_URL = "mysql+pymysql://root:Hjb0520+-@localhost:3306/m_agents"
+# 将 localhost 改为你的服务器公网 IP
+MYSQL_URL = "mysql+pymysql://root:Hjb0520+-@47.103.5.199:3306/m_agents"
 BATCH_SIZE = 2000  # 每批插入行数
 
 # ── 按外键依赖排列的表顺序（父表在前、子表在后）──
