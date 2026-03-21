@@ -19,6 +19,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# 确保 public 目录存在（项目可能没有该目录）
+RUN mkdir -p public
+
 # 构建 Next.js 应用（standalone 模式）
 RUN npm run build
 
