@@ -316,6 +316,15 @@ async def analyze_case_stream(
             event_queue.put_nowait(("complete", {"agent_output": result}))
         except Exception as e:
             thread_db.rollback()
+            # 确保 case.status 不会卡在 ANALYZING
+            try:
+                case_obj = thread_db.query(RiskCase).filter(RiskCase.id == case_id).first()
+                if case_obj and case_obj.status == "ANALYZING":
+                    case_obj.status = "PENDING"
+                    case_obj.analysis_progress_json = None
+                    thread_db.commit()
+            except Exception:
+                pass
             event_queue.put_nowait(("error", {"error": str(e)}))
         finally:
             thread_db.close()

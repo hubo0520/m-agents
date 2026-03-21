@@ -744,6 +744,19 @@ def write_audit_log(state: GraphState) -> dict:
                 run.ended_at = utc_now()
                 run.status = current_status
 
+        # 清理分析进度数据（工作流已结束，不再需要进度恢复）
+        case = db.query(RiskCase).filter(RiskCase.id == case_id).first()
+        if case:
+            case.analysis_progress_json = None
+            # 如果工作流失败但 status 仍为 ANALYZING，确保不会卡住
+            if case.status == "ANALYZING" and current_status in (
+                WorkflowStatus.FAILED_RETRYABLE.value,
+                WorkflowStatus.FAILED_FINAL.value,
+                "FAILED",
+            ):
+                case.status = "PENDING"
+                logger.warning("⚠️ 工作流失败，将案件状态从 ANALYZING 回退为 PENDING | case_id={}", case_id)
+
         db.commit()
         return {"current_status": current_status}
     except Exception as e:

@@ -470,12 +470,15 @@ def start_workflow(case_id: int, on_progress=None, on_llm_event=None) -> dict:
         }
 
         # 执行 graph
+        # ⚠️ 当有 SSE 回调时，必须使用顺序执行模式，
+        # 因为 LangGraph 的 graph.invoke() 不支持注入 on_progress/on_llm_event 回调，
+        # 会导致前端收不到任何进度事件（表现为"瞬间完成"且刷新后一直"分析中"）
         graph = get_graph()
-        if graph:
-            logger.info("📊 使用 LangGraph 执行工作流")
+        if graph and not on_progress and not on_llm_event:
+            logger.info("📊 使用 LangGraph 执行工作流（无 SSE 回调）")
             final_state = graph.invoke(initial_state)
         else:
-            logger.info("📊 LangGraph 不可用，使用顺序执行 fallback")
+            logger.info("📊 使用顺序执行模式（支持 SSE 进度推送）")
             final_state = _run_sequential(initial_state, on_progress=on_progress, on_llm_event=on_llm_event)
 
         logger.info("✅ V3 工作流完成: run_id=%s, status=%s",
