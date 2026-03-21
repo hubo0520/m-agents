@@ -435,8 +435,70 @@ export default function ConversationPanel({ caseId, caseStatus }: ConversationPa
       </div>
 
       {/* 主体区域：左侧 Tab + 右侧消息 */}
-      <div className="flex flex-1 min-h-0">
-        {/* 左侧历史对话 Tab（移动端默认隐藏） */}
+      <div className="flex flex-1 min-h-0 relative">
+        {/* 移动端历史对话：覆盖层 */}
+        {showSidebar && isMobile && (
+          <div className="absolute inset-0 z-30 flex">
+            {/* 半透明背景 */}
+            <div
+              className="absolute inset-0 bg-black/20"
+              onClick={() => setShowSidebar(false)}
+            />
+            <div className="relative z-10 w-[240px] bg-white border-r border-slate-100 flex flex-col flex-shrink-0 shadow-lg">
+              <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">历史对话</span>
+                <button
+                  onClick={() => setShowSidebar(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {conversations.length === 0 ? (
+                  <div className="px-3 py-4 text-center">
+                    <p className="text-xs text-slate-400">暂无对话</p>
+                  </div>
+                ) : (
+                  conversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => {
+                        handleSwitchConversation(conv.id);
+                        setShowSidebar(false);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 border-b border-slate-100/60 transition-colors ${
+                        conv.id === activeConvId
+                          ? "bg-blue-50 border-l-2 border-l-blue-500"
+                          : "hover:bg-slate-100/80"
+                      }`}
+                    >
+                      <p className={`text-xs font-medium truncate ${
+                        conv.id === activeConvId ? "text-blue-700" : "text-slate-700"
+                      }`}>
+                        {conv.title || "新对话"}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] text-slate-400">
+                          {conv.message_count} 条消息
+                        </span>
+                        {conv.updated_at && (
+                          <span className="text-[10px] text-slate-300">
+                            {new Date(conv.updated_at).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 桌面端历史对话 Tab */}
         {showSidebar && !isMobile && (
           <div
             className="border-r border-slate-100 bg-slate-50/50 flex flex-col flex-shrink-0"
