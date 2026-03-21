@@ -22,6 +22,10 @@ COPY . .
 # 确保 public 目录存在（项目可能没有该目录）
 RUN mkdir -p public
 
+# 通过 Nginx 反向代理，前端 API 使用相对路径（空字符串）
+ARG NEXT_PUBLIC_API_BASE=""
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+
 # 构建 Next.js 应用（standalone 模式）
 RUN npm run build
 

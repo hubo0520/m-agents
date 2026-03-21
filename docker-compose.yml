@@ -72,7 +72,7 @@ services:
       VECTOR_STORE_DIR: ${VECTOR_STORE_DIR:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v4}
       # CORS（容器环境下 Nginx 代理，可放宽）
-      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://frontend:3000"]'
+      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://frontend:3000","*"]'
     volumes:
       - app-logs:/app/logs
     depends_on:
@@ -93,6 +93,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # 空字符串 → 前端通过 Nginx 反向代理使用相对路径访问 API
+        NEXT_PUBLIC_API_BASE: ""
     container_name: m-agents-frontend
     environment:
       NODE_ENV: production
