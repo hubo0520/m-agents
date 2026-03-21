@@ -24,6 +24,7 @@ const MIN_HEIGHT = 480;
 const DEFAULT_WIDTH = 580;
 const DEFAULT_HEIGHT = 620;
 const SIDEBAR_WIDTH = 180;
+const MOBILE_BREAKPOINT = 640; // sm 断点
 
 function loadPanelSize(): { width: number; height: number } {
   try {
@@ -117,6 +118,15 @@ export default function ConversationPanel({ caseId, caseStatus }: ConversationPa
 
   // 不允许 NEW 状态的案件创建对话
   const canChat = caseStatus !== "NEW";
+
+  // 检测是否移动端
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // 初始化位置
   useEffect(() => {
@@ -349,37 +359,50 @@ export default function ConversationPanel({ caseId, caseStatus }: ConversationPa
   const pos = panelPos || { x: window.innerWidth - panelSize.width - 16, y: window.innerHeight - panelSize.height - 16 };
 
   // 展开状态：对话面板
+  // 移动端全屏，桌面端使用拖拽窗口
   return (
     <div
       ref={panelRef}
-      className="fixed z-40 bg-white border border-slate-200 shadow-2xl rounded-xl flex flex-col overflow-hidden"
-      style={{
-        left: pos.x,
-        top: pos.y,
-        width: panelSize.width,
-        height: panelSize.height,
-      }}
+      className={`fixed z-40 bg-white flex flex-col overflow-hidden ${
+        isMobile
+          ? "inset-0 rounded-none"
+          : "border border-slate-200 shadow-2xl rounded-xl"
+      }`}
+      style={
+        isMobile
+          ? undefined
+          : {
+              left: pos.x,
+              top: pos.y,
+              width: panelSize.width,
+              height: panelSize.height,
+            }
+      }
     >
-      {/* 缩放手柄 — 左边缘 */}
-      <div
-        className="absolute left-0 top-0 w-1.5 h-full cursor-ew-resize hover:bg-blue-300/30 transition-colors z-10"
-        onMouseDown={(e) => handleResizeStart("left", e)}
-      />
-      {/* 缩放手柄 — 上边缘 */}
-      <div
-        className="absolute top-0 left-0 w-full h-1.5 cursor-ns-resize hover:bg-blue-300/30 transition-colors z-10"
-        onMouseDown={(e) => handleResizeStart("top", e)}
-      />
-      {/* 缩放手柄 — 左上角 */}
-      <div
-        className="absolute top-0 left-0 w-3 h-3 cursor-nwse-resize z-20"
-        onMouseDown={(e) => handleResizeStart("top-left", e)}
-      />
+      {/* 缩放手柄（仅桌面端） */}
+      {!isMobile && (
+        <>
+          <div
+            className="absolute left-0 top-0 w-1.5 h-full cursor-ew-resize hover:bg-blue-300/30 transition-colors z-10"
+            onMouseDown={(e) => handleResizeStart("left", e)}
+          />
+          <div
+            className="absolute top-0 left-0 w-full h-1.5 cursor-ns-resize hover:bg-blue-300/30 transition-colors z-10"
+            onMouseDown={(e) => handleResizeStart("top", e)}
+          />
+          <div
+            className="absolute top-0 left-0 w-3 h-3 cursor-nwse-resize z-20"
+            onMouseDown={(e) => handleResizeStart("top-left", e)}
+          />
+        </>
+      )}
 
-      {/* 头部（可拖拽） */}
+      {/* 头部（桌面端可拖拽） */}
       <div
-        className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/80 rounded-t-xl cursor-move select-none"
-        onMouseDown={handleDragStart}
+        className={`flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/80 select-none ${
+          isMobile ? "" : "rounded-t-xl cursor-move"
+        }`}
+        onMouseDown={isMobile ? undefined : handleDragStart}
       >
         <div className="flex items-center gap-2">
           <span className="text-base">💬</span>
@@ -413,8 +436,8 @@ export default function ConversationPanel({ caseId, caseStatus }: ConversationPa
 
       {/* 主体区域：左侧 Tab + 右侧消息 */}
       <div className="flex flex-1 min-h-0">
-        {/* 左侧历史对话 Tab */}
-        {showSidebar && (
+        {/* 左侧历史对话 Tab（移动端默认隐藏） */}
+        {showSidebar && !isMobile && (
           <div
             className="border-r border-slate-100 bg-slate-50/50 flex flex-col flex-shrink-0"
             style={{ width: SIDEBAR_WIDTH }}
