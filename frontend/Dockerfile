@@ -9,7 +9,7 @@ FROM docker.m.daocloud.io/library/node:18-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+RUN npm ci
 
 # ── 阶段 2：构建 ──
 FROM docker.m.daocloud.io/library/node:18-alpine AS builder
