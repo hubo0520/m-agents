@@ -8,6 +8,9 @@ FROM docker.m.daocloud.io/library/python:3.11-slim AS builder
 
 WORKDIR /build
 
+# 替换为阿里云 Debian 镜像源
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+
 # 安装系统级编译依赖（部分 Python 包需要）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -22,6 +25,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM docker.m.daocloud.io/library/python:3.11-slim
 
 WORKDIR /app
+
+# 替换为阿里云 Debian 镜像源
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
 
 # 安装运行时依赖（MySQL 客户端库）
 RUN apt-get update && apt-get install -y --no-install-recommends \
