@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/lib/auth";
 import { AuthGuard } from "@/components/AuthGuard";
 import { Sidebar } from "@/components/ui/Sidebar";
+import { RateLimitBanner } from "@/components/ui/RateLimitBanner";
 import { Toaster } from "sonner";
 
 /**
@@ -19,6 +20,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <Toaster position="top-right" richColors closeButton duration={4000} />
+      <RateLimitBanner />
       {isAuthPage ? (
         // 登录/注册页：无侧边栏，无认证守卫
         <>{children}</>

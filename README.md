@@ -23,6 +23,7 @@ Transform risk signals — surging returns, cash gaps, suspected fraud — into 
 ## 📑 目录 / Table of Contents
 
 - [✨ 核心能力 / Features](#-核心能力--features)
+- [📸 系统截图 / Screenshots](#-系统截图--screenshots)
 - [🏗 系统架构 / Architecture](#-系统架构--architecture)
 - [🚀 快速开始 / Quick Start](#-快速开始--quick-start)
 - [📁 项目结构 / Project Structure](#-项目结构--project-structure)
@@ -114,6 +115,90 @@ L2: 规则引擎降级 (evaluate_risk + generate_rule_recommendations)
 L3: 人工接管 (创建 ApprovalTask, workflow → PAUSED)
     Human Handoff (create ApprovalTask, workflow → PAUSED)
 ```
+
+---
+
+## 📸 系统截图 / Screenshots
+
+### 风险控制台 / Risk Dashboard
+
+运营人员的主工作台，展示商家风险全景：高风险案件数、现金缺口总额、待处理审批等核心指标一目了然。
+
+The main workspace for operators, showing a panoramic view of merchant risks: high-risk cases, total cash gaps, pending approvals, and other key metrics at a glance.
+
+![风险控制台](docs/picture/风险控制台.png)
+
+### 案件详情 / Case Detail
+
+单个案件的完整分析视图，包含商家信息、风险指标、证据链、处置建议，以及右侧的 RAG 对话面板支持自然语言追问。
+
+Complete analysis view for a single case, including merchant info, risk metrics, evidence chain, recommendations, and a RAG conversation panel on the right for natural language follow-up questions.
+
+![案件详情](docs/picture/案件详情.png)
+
+### Agent 工作流可视化 / Agent Workflow Visualization
+
+实时展示 9 个 Agent 的工作流执行进度，每个节点的状态、耗时一目了然。LLM Agent 节点可展开查看输入 Prompt 和流式回复。
+
+Real-time visualization of the 9-Agent workflow execution progress, with each node's status and latency clearly displayed. LLM Agent nodes can be expanded to view input prompts and streaming responses.
+
+![Agent工作流](docs/picture/agent工作流.png)
+
+### 工作流中心 / Workflow Center
+
+所有工作流运行实例的管理视图，支持按状态筛选、查看执行轨迹、重试失败的工作流。
+
+Management view for all workflow run instances, supporting status filtering, execution trace viewing, and retrying failed workflows.
+
+![工作流中心](docs/picture/工作流中心.png)
+
+### 审批中心 / Approval Center
+
+高风险动作的审批队列，融资、理赔、反欺诈复核等审批任务集中管理，支持批量审批和 SLA 超时检测。
+
+Approval queue for high-risk actions, centrally managing financing, claims, and fraud review approvals, with batch approval and SLA timeout detection.
+
+![审批中心](docs/picture/审批中心.png)
+
+### 审批详情 / Approval Detail
+
+单个审批任务的详细信息，包含 Agent 生成的处置建议、风险评估依据，审批人可批准、驳回或修改后批准。
+
+Detailed view of a single approval task, including Agent-generated recommendations and risk assessment basis. Approvers can approve, reject, or revise-and-approve.
+
+![审批详情](docs/picture/审批详情.png)
+
+### 评测中心 / Evaluation Center
+
+LLM-as-Judge 评测中心，展示评测运行列表、数据集管理，支持对比不同 Prompt 版本和模型的分析质量。
+
+LLM-as-Judge evaluation center, showing evaluation run lists and dataset management, supporting quality comparison across different Prompt versions and models.
+
+![评测中心](docs/picture/评测中心.png)
+
+### 评测详情 / Evaluation Detail
+
+单次评测运行的详细结果，包含每条测试用例的 LLM-Judge 评分、幻觉检测、证据覆盖率等质量指标。
+
+Detailed results of a single evaluation run, including LLM-Judge scores, hallucination detection, and evidence coverage metrics for each test case.
+
+![评测详情](docs/picture/评测详情.png)
+
+### 可观测面板 / Observability Dashboard
+
+Agent 运行可观测面板，可视化展示今日分析量、平均响应时间、LLM 调用成功率、降级触发次数，以及近 7 天趋势图表。
+
+Agent runtime observability dashboard, visualizing today's analysis volume, average response time, LLM call success rate, fallback trigger count, and 7-day trend charts.
+
+![可观测面板](docs/picture/可观测.png)
+
+### 设置 / Settings
+
+系统配置页面，包含规则引擎阈值配置、Agent 配置管理、Prompt 版本管理（支持灰度分流和版本回滚）。
+
+System configuration page, including rule engine threshold settings, Agent configuration management, and Prompt version management (with canary deployment and version rollback).
+
+![设置](docs/picture/设置.png)
 
 ---
 

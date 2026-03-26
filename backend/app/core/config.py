@@ -61,6 +61,18 @@ class Settings(BaseSettings):
     EMBEDDING_BATCH_SIZE: int = 6               # 嵌入请求批量大小（text-embedding-v4 限制较严，建议 ≤6）
     RAG_TOP_K: int = 5                          # 语义检索返回的最相关文档数
 
+    # API 限流配置
+    RATE_LIMIT_DEFAULT: int = 120         # 普通 API 每分钟最大请求数
+    RATE_LIMIT_ANALYSIS: int = 5          # 分析类 API 每分钟最大请求数
+    RATE_LIMIT_AUTH: int = 20             # 认证类 API（登录/注册）每分钟最大请求数
+
+    # LLM 并发控制
+    LLM_MAX_CONCURRENCY: int = 3          # LLM 最大并发调用数
+    LLM_QUEUE_TIMEOUT: int = 120          # LLM 排队等待超时（秒）
+
+    # 通知配置
+    NOTIFICATION_POLL_INTERVAL: int = 30  # 前端轮询间隔（秒），仅用于文档说明
+
     @model_validator(mode="after")
     def _validate_security(self) -> "Settings":
         """安全校验：非调试模式下 JWT 密钥必须有效"""

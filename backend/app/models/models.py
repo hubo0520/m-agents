@@ -670,3 +670,36 @@ class ConversationMessage(Base):
     __table_args__ = (
         Index("ix_conversation_messages_conversation_id", "conversation_id"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# V5: 通知系统
+# ═══════════════════════════════════════════════════════════════
+
+# ─────────────────────── 28. notifications ───────────────────────
+
+class NotificationType(str, enum.Enum):
+    """通知类型"""
+    APPROVAL_PENDING = "approval_pending"       # 审批待办
+    APPROVAL_RESULT = "approval_result"         # 审批结果
+    ANALYSIS_COMPLETE = "analysis_complete"     # 分析完成
+    RISK_ALERT = "risk_alert"                   # 高风险预警
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(64), nullable=False)
+    title = Column(String(256), nullable=False)
+    content = Column(Text, nullable=True)
+    type = Column(String(32), nullable=False)  # 对应 NotificationType
+    related_entity_type = Column(String(64), nullable=True)  # risk_case / review
+    related_entity_id = Column(Integer, nullable=True)
+    is_read = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=utc_now)
+
+    __table_args__ = (
+        Index("ix_notifications_user_id", "user_id"),
+        Index("ix_notifications_user_read", "user_id", "is_read"),
+    )

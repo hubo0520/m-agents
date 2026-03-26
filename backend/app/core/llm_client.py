@@ -6,6 +6,7 @@ LLM 客户端 — 统一封装 OpenAI 调用
 from dataclasses import dataclass, asdict
 from typing import Callable, Optional, Type, TypeVar
 import time
+import threading
 
 from pydantic import BaseModel
 from loguru import logger
@@ -16,6 +17,47 @@ T = TypeVar("T", bound=BaseModel)
 
 # 懒加载 OpenAI 客户端（仅在 USE_LLM=True 时初始化）
 _client = None
+
+# LLM 并发控制信号量
+_llm_semaphore = threading.Semaphore(settings.LLM_MAX_CONCURRENCY)
+_llm_waiting_count = 0
+_llm_waiting_lock = threading.Lock()
+
+
+def _acquire_llm_semaphore(timeout: Optional[int] = None) -> float:
+    """
+    获取 LLM 信号量，返回等待耗时（毫秒）。
+    超时则抛出 LlmQueueTimeoutError。
+    """
+    global _llm_waiting_count
+    timeout = timeout or settings.LLM_QUEUE_TIMEOUT
+
+    with _llm_waiting_lock:
+        _llm_waiting_count += 1
+        waiting = _llm_waiting_count
+
+    if waiting > 1:
+        logger.info("LLM 排队中 | 当前等待数={}", waiting)
+
+    wait_start = time.time()
+    acquired = _llm_semaphore.acquire(timeout=timeout)
+    wait_ms = int((time.time() - wait_start) * 1000)
+
+    with _llm_waiting_lock:
+        _llm_waiting_count -= 1
+
+    if not acquired:
+        from app.core.exceptions import LlmQueueTimeoutError
+        logger.error("LLM 排队超时 | timeout={}s | wait_ms={}", timeout, wait_ms)
+        raise LlmQueueTimeoutError(
+            detail=f"LLM 服务繁忙，排队等待 {timeout} 秒后超时",
+            extra={"wait_ms": wait_ms, "timeout": timeout},
+        )
+
+    if wait_ms > 100:
+        logger.info("LLM 信号量获取成功 | wait_ms={}", wait_ms)
+
+    return wait_ms
 
 
 def _get_client():
@@ -63,17 +105,21 @@ def chat_completion(
         LLM 回复文本
     """
     client = _get_client()
-    t0 = time.time()
-    response = client.chat.completions.create(
-        model=model or settings.OPENAI_MODEL,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    elapsed_ms = int((time.time() - t0) * 1000)
-    content = response.choices[0].message.content
-    logger.info("LLM 调用完成 | model={} | elapsed_ms={}", model or settings.OPENAI_MODEL, elapsed_ms)
-    return content if content is not None else ""
+    wait_ms = _acquire_llm_semaphore()
+    try:
+        t0 = time.time()
+        response = client.chat.completions.create(
+            model=model or settings.OPENAI_MODEL,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        elapsed_ms = int((time.time() - t0) * 1000)
+        content = response.choices[0].message.content
+        logger.info("LLM 调用完成 | model={} | elapsed_ms={} | queue_wait_ms={}", model or settings.OPENAI_MODEL, elapsed_ms, wait_ms)
+        return content if content is not None else ""
+    finally:
+        _llm_semaphore.release()
 
 
 def chat_completion_stream(
@@ -101,25 +147,29 @@ def chat_completion_stream(
         return chat_completion(messages, model, temperature, max_tokens)
 
     client = _get_client()
-    stream = client.chat.completions.create(
-        model=model or settings.OPENAI_MODEL,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-    )
+    wait_ms = _acquire_llm_semaphore()
+    try:
+        stream = client.chat.completions.create(
+            model=model or settings.OPENAI_MODEL,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
 
-    full_content = ""
-    for chunk in stream:
-        delta = chunk.choices[0].delta
-        if delta.content:
-            full_content += delta.content
-            try:
-                on_chunk(delta.content)
-            except Exception as e:
-                logger.warning("on_chunk 回调异常: %s", e)
+        full_content = ""
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                full_content += delta.content
+                try:
+                    on_chunk(delta.content)
+                except Exception as e:
+                    logger.warning("on_chunk 回调异常: %s", e)
 
-    return full_content
+        return full_content
+    finally:
+        _llm_semaphore.release()
 
 
 def structured_output(
@@ -144,39 +194,42 @@ def structured_output(
         解析后的 Pydantic 模型实例
     """
     client = _get_client()
-
+    wait_ms = _acquire_llm_semaphore()
     try:
-        # 优先尝试 beta.chat.completions.parse（OpenAI Structured Outputs）
-        response = client.beta.chat.completions.parse(
+        try:
+            # 优先尝试 beta.chat.completions.parse（OpenAI Structured Outputs）
+            response = client.beta.chat.completions.parse(
+                model=model or settings.OPENAI_MODEL,
+                messages=messages,
+                response_format=response_model,
+                temperature=temperature,
+            )
+            parsed = response.choices[0].message.parsed
+            if parsed is not None:
+                return parsed
+        except Exception as e:
+            logger.warning("Structured Output 解析失败，回退到 JSON 模式: %s", e)
+
+        # 回退：使用 JSON 模式 + 手动解析
+        import json
+        messages_with_schema = messages.copy()
+        schema_hint = json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+        messages_with_schema.append({
+            "role": "user",
+            "content": f"请严格按以下 JSON Schema 输出，不要输出其他内容:\n{schema_hint}",
+        })
+
+        response = client.chat.completions.create(
             model=model or settings.OPENAI_MODEL,
-            messages=messages,
-            response_format=response_model,
+            messages=messages_with_schema,
             temperature=temperature,
+            response_format={"type": "json_object"},
         )
-        parsed = response.choices[0].message.parsed
-        if parsed is not None:
-            return parsed
-    except Exception as e:
-        logger.warning("Structured Output 解析失败，回退到 JSON 模式: %s", e)
 
-    # 回退：使用 JSON 模式 + 手动解析
-    import json
-    messages_with_schema = messages.copy()
-    schema_hint = json.dumps(response_model.model_json_schema(), ensure_ascii=False)
-    messages_with_schema.append({
-        "role": "user",
-        "content": f"请严格按以下 JSON Schema 输出，不要输出其他内容:\n{schema_hint}",
-    })
-
-    response = client.chat.completions.create(
-        model=model or settings.OPENAI_MODEL,
-        messages=messages_with_schema,
-        temperature=temperature,
-        response_format={"type": "json_object"},
-    )
-
-    raw_json = response.choices[0].message.content
-    return response_model.model_validate_json(raw_json)
+        raw_json = response.choices[0].message.content
+        return response_model.model_validate_json(raw_json)
+    finally:
+        _llm_semaphore.release()
 
 
 def is_llm_enabled() -> bool:

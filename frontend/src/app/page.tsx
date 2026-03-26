@@ -73,7 +73,7 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const [statsRes, casesRes, approvalsRes, workflowsRes] = await Promise.all([
-        getDashboardStats(),
+        getDashboardStats().catch(() => null),
         getRiskCases({
           risk_level: riskLevel || undefined,
           status: status || undefined,
@@ -81,12 +81,12 @@ export default function DashboardPage() {
           sort_by: sortBy || undefined,
           page,
           page_size: 20,
-        }),
+        }).catch(() => null),
         getApprovals({ status: "PENDING", page_size: 5 }).catch(() => ({ items: [], total: 0 })),
         getWorkflows({ status: "FAILED_RETRYABLE", page_size: 5 }).catch(() => ({ items: [], total: 0 })),
       ]);
-      setStats(statsRes);
-      setData(casesRes);
+      if (statsRes) setStats(statsRes);
+      if (casesRes) setData(casesRes);
       setPendingApprovals((approvalsRes as any).items || []);
       setPendingCount((approvalsRes as any).total || 0);
       setFailedWorkflows((workflowsRes as any).items || []);

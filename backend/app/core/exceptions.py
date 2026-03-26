@@ -59,3 +59,17 @@ class ApprovalException(AppException):
     
     def __init__(self, detail: str, status_code: int = 400, extra: Optional[Dict[str, Any]] = None):
         super().__init__("APPROVAL_ERROR", detail, status_code, extra)
+
+
+class RateLimitExceededError(AppException):
+    """API 限流异常"""
+
+    def __init__(self, detail: str = "请求过于频繁，请稍后再试", extra: Optional[Dict[str, Any]] = None):
+        super().__init__("RATE_LIMIT_EXCEEDED", detail, 429, extra)
+
+
+class LlmQueueTimeoutError(AppException):
+    """LLM 排队超时异常"""
+
+    def __init__(self, detail: str = "LLM 服务繁忙，请稍后重试", extra: Optional[Dict[str, Any]] = None):
+        super().__init__("LLM_QUEUE_TIMEOUT", detail, 503, extra)

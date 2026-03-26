@@ -38,7 +38,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# V3: RBAC 认证中间件（开发阶段默认 admin，可通过 Header 切换角色）
+# API 限流中间件（需在 Auth 之后执行，所以先 add —— Starlette 栈式：后 add 先执行）
+from app.core.rate_limiter import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
+# V3: RBAC 认证中间件（后 add → 先执行，确保 user_id 已注入 request.state）
 from app.core.auth_middleware import AuthMiddleware
 app.add_middleware(AuthMiddleware)
 
@@ -60,6 +64,10 @@ app.include_router(users_api.router)
 # 注册路由 — V4 对话式分析
 app.include_router(conversations_api.router)
 app.include_router(observability_api.router)
+
+# 注册路由 — V5 通知系统
+from app.api import notifications as notifications_api
+app.include_router(notifications_api.router)
 
 
 @app.get("/health")

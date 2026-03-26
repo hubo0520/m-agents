@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 interface NavItem {
   label: string;
@@ -122,16 +123,20 @@ export function Sidebar() {
           <span className="text-sm font-semibold text-slate-800 leading-tight">商家经营保障</span>
           <span className="text-[10px] text-slate-400 font-medium">Agent V3</span>
         </div>
-        {/* 移动端关闭按钮 */}
-        <button
-          onClick={() => setMobileOpen(false)}
-          className="ml-auto md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-          aria-label="关闭菜单"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {/* 通知中心 */}
+        <div className="ml-auto flex items-center gap-1">
+          <NotificationCenter />
+          {/* 移动端关闭按钮 */}
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            aria-label="关闭菜单"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* 导航区 */}

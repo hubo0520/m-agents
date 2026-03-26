@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limiter import analysis_lock
 from app.models.models import WorkflowRun, AgentRun, RiskCase
 
 
@@ -30,12 +31,21 @@ def start_workflow_api(req: StartWorkflowRequest, db: Session = Depends(get_db))
     if not case:
         raise HTTPException(status_code=404, detail="案件不存在")
 
+    # 检查是否正在分析中（防重复触发）
+    if not analysis_lock.acquire(req.case_id):
+        raise HTTPException(
+            status_code=409,
+            detail="该案件正在分析中，请稍后",
+        )
+
     from app.workflow.graph import start_workflow
     try:
         result = start_workflow(req.case_id)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        analysis_lock.release(req.case_id)
 
 
 # ───────────────── POST /api/workflows/{run_id}/resume ─────────

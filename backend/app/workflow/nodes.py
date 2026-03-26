@@ -25,6 +25,7 @@ from app.agents.analysis_agent import run_diagnosis
 from app.agents.evidence_agent import run_evidence
 from app.agents.compliance_agent import run_compliance_guard
 from app.agents.summary_agent import run_summary
+from app.services.notification import NotificationService
 
 
 def _get_db():
@@ -160,6 +161,20 @@ def triage_case(state: GraphState) -> dict:
         # 追加分诊结论到 analysis_context
         triage_insight = f"case_type={output.get('case_type','')}, priority={output.get('priority','')}, reasoning={output.get('reasoning','')}"
         new_context = append_analysis_context(state, "triage", triage_insight)
+
+        # V5: 高风险案件预警通知
+        priority = output.get("priority", "").upper()
+        if priority in ("HIGH", "CRITICAL"):
+            try:
+                NotificationService.notify_risk_alert(
+                    db=db,
+                    case_id=state["case_id"],
+                    priority=priority,
+                )
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.warning("高风险预警通知发送失败（不影响主流程）: {}", e)
 
         return {
             "triage_output": output,
@@ -534,6 +549,16 @@ def create_approval_tasks(state: GraphState) -> dict:
                 db.flush()
                 approval_task_ids.append(task.id)
 
+        # V5: 审批待办通知 → 通知审批人
+        try:
+            NotificationService.notify_approval_pending(
+                db=db,
+                case_id=case_id,
+                case_summary=state.get("summary_output", {}).get("case_summary", ""),
+            )
+        except Exception as e:
+            logger.warning("审批待办通知发送失败（不影响主流程）: {}", e)
+
         if workflow_run_id:
             _update_workflow_run(db, workflow_run_id, WorkflowStatus.PENDING_APPROVAL.value, "create_approval_tasks")
             latency = int((time.time() - start_time) * 1000)
@@ -700,6 +725,19 @@ def finalize_summary(state: GraphState) -> dict:
                 logger.info("⚠️ 向量存储不可用，跳过索引 | case_id={}", case_id)
         except Exception as e:
             logger.warning("向量索引失败（不影响主流程）| case_id={}: {}", case_id, e)
+
+        # V5: 分析完成通知
+        try:
+            NotificationService.notify_analysis_complete(
+                db=db,
+                case_id=case_id,
+                creator_user_id="1",  # TODO: 从 risk_case 关联查询实际创建者 ID
+                success=True,
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning("分析完成通知发送失败（不影响主流程）: {}", e)
 
         return {
             "summary_output": output,

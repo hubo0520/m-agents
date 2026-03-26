@@ -35,9 +35,12 @@ export default function EvalsPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [ds, rs] = await Promise.all([getEvalDatasets(), getEvalRuns()]);
-    setDatasets(ds.items || []);
-    setRuns(rs.items || []);
+    const [ds, rs] = await Promise.all([
+      getEvalDatasets().catch(() => null),
+      getEvalRuns().catch(() => null),
+    ]);
+    if (ds) setDatasets(ds.items || []);
+    if (rs) setRuns(rs.items || []);
     setLoading(false);
   }, []);
 

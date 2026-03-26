@@ -5,9 +5,11 @@ import json
 from datetime import datetime
 from app.core.utils import utc_now
 from sqlalchemy.orm import Session
+from loguru import logger
 
 from app.models.models import RiskCase, Review, AuditLog, Recommendation
 from app.services.task_generator import generate_tasks_for_case
+from app.services.notification import NotificationService
 
 
 # 合法状态流转
@@ -130,6 +132,20 @@ def review_case(
 
     # 状态流转
     transition_status(db, case, target_status, reviewer_id)
+
+    # V5: 审批结果通知 → 通知案件创建者
+    try:
+        # 此处使用 reviewer_id 作为审批人名称（实际可从 User 表查询 display_name）
+        NotificationService.notify_approval_result(
+            db=db,
+            case_id=case_id,
+            creator_user_id="1",  # TODO: 从 risk_case 关联查询实际创建者 ID
+            decision=decision,
+            reviewer_name=reviewer_id,
+            comment=comment or "",
+        )
+    except Exception as e:
+        logger.warning("审批结果通知发送失败（不影响审批）: %s", e)
 
     # 审计日志
     write_audit_log(

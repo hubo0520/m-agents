@@ -131,15 +131,15 @@ export default function ObservabilityPage() {
     setLoading(true);
     try {
       const [summaryRes, trendRes, agentRes, statusRes] = await Promise.all([
-        getObservabilitySummary(days),
-        getLatencyTrend(days),
-        getAgentLatency(days),
-        getWorkflowStatusDist(days),
+        getObservabilitySummary(days).catch(() => null),
+        getLatencyTrend(days).catch(() => null),
+        getAgentLatency(days).catch(() => null),
+        getWorkflowStatusDist(days).catch(() => null),
       ]);
-      setSummary(summaryRes);
-      setTrend(trendRes.trend);
-      setAgentLatency(agentRes.agents);
-      setWorkflowStatus(statusRes.statuses);
+      if (summaryRes) setSummary(summaryRes);
+      if (trendRes) setTrend(trendRes.trend);
+      if (agentRes) setAgentLatency(agentRes.agents);
+      if (statusRes) setWorkflowStatus(statusRes.statuses);
     } catch (err) {
       console.error("加载可观测数据失败:", err);
     } finally {
